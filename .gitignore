@@ -1,1 +1,25 @@
+# Datasets
+DataSets/
+dataset/
+datasets/
+NYURGB/
 HHA_datasets/
+labels/
+
+# Training artifacts / checkpoints
+Checkpoint/
+checkpoints/
+*.pth
+*.pt
+*.ckpt
+
+# Logs / outputs
+runs/
+logs/
+*.log
+result_*.png
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
