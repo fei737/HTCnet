@@ -1,13 +1,13 @@
 import os
 import cv2
+import argparse
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
-from modules.models.model import PFNet, get_spatial_gradient
-import torch.nn.functional as F
 
-weight_path = 'Checkpoint/best_model_0.403.pth'
+from models import PFNet
 
 
 class NYUBaselineDataset(Dataset):
@@ -15,117 +15,151 @@ class NYUBaselineDataset(Dataset):
         self.root_dir = root_dir
         self.indices = range(0, 795) if mode == 'train' else range(795, 1449)
 
-    def __len__(self): return len(self.indices)
+    def __len__(self):
+        return len(self.indices)
 
     def __getitem__(self, index):
         real_idx = self.indices[index]
-        rgb = cv2.cvtColor(cv2.imread(os.path.join(self.root_dir, 'NYURGB', f'{real_idx:04d}.png')), cv2.COLOR_BGR2RGB)
-        hha = cv2.cvtColor(cv2.imread(os.path.join(self.root_dir, 'HHA_datasets', f'hha_{real_idx:04d}.png')),
-                           cv2.COLOR_BGR2RGB)
+        rgb = cv2.cvtColor(
+            cv2.imread(os.path.join(self.root_dir, 'NYURGB', f'{real_idx:04d}.png')),
+            cv2.COLOR_BGR2RGB
+        )
+        hha = cv2.cvtColor(
+            cv2.imread(os.path.join(self.root_dir, 'HHA_datasets', f'hha_{real_idx:04d}.png')),
+            cv2.COLOR_BGR2RGB
+        )
         label = cv2.imread(os.path.join(self.root_dir, 'labels', f'{real_idx:04d}.png'), 0)
 
-        # 标签处理
         label_13 = (label % 13) + 1
         label_13[label == 0] = 0
 
-        # Resize & Normalize
         rgb = cv2.resize(rgb, (320, 320))
         hha = cv2.resize(hha, (320, 320))
         label_13 = cv2.resize(label_13, (320, 320), interpolation=cv2.INTER_NEAREST)
 
         rgb_t = torch.from_numpy(rgb).permute(2, 0, 1).float() / 255.0
         hha_t = torch.from_numpy(hha).permute(2, 0, 1).float() / 255.0
-        return rgb_t, hha_t, torch.from_numpy(label_13).long()
+        mask_t = torch.from_numpy(label_13).long()
+        return rgb_t, hha_t, mask_t
 
 
-def validate(model, loader, device):
+def dice_loss(logits, target, ignore_index=0, eps=1e-6):
+    n_classes = logits.shape[1]
+    probs = torch.softmax(logits, dim=1)
+    valid = (target != ignore_index).float().unsqueeze(1)
+    onehot = F.one_hot(torch.clamp(target, min=0), num_classes=n_classes).permute(0, 3, 1, 2).float()
+    onehot = onehot * valid
+    probs = probs * valid
+
+    inter = (probs * onehot).sum(dim=(0, 2, 3))
+    den = probs.sum(dim=(0, 2, 3)) + onehot.sum(dim=(0, 2, 3))
+    dice = (2 * inter + eps) / (den + eps)
+    return 1 - dice[1:].mean()
+
+
+def edge_target_from_mask(masks):
+    """从语义 mask 生成边界监督 (B,1,H,W)."""
+    x = masks.float().unsqueeze(1)
+    kernel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=x.dtype, device=x.device).view(1, 1, 3, 3)
+    kernel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=x.dtype, device=x.device).view(1, 1, 3, 3)
+    gx = F.conv2d(x, kernel_x, padding=1)
+    gy = F.conv2d(x, kernel_y, padding=1)
+    g = torch.abs(gx) + torch.abs(gy)
+    return (g > 0).float()
+
+
+def validate(model, loader, device, n_classes=14):
     model.eval()
-    inter, union = 0, 0
+    inter = torch.zeros(n_classes, device=device)
+    union = torch.zeros(n_classes, device=device)
     with torch.no_grad():
         for rgb, hha, masks in loader:
             rgb, hha, masks = rgb.to(device), hha.to(device), masks.to(device)
-            preds = torch.argmax(model(rgb, hha), dim=1)
-            for cls in range(1, 14):  # 排除背景类 0
-                inter += ((preds == cls) & (masks == cls)).sum().item()
-                union += ((preds == cls) | (masks == cls)).sum().item()
-    return inter / (union + 1e-6)
+            out = model(rgb, hha)
+            if isinstance(out, tuple):
+                out = out[0]
+            preds = torch.argmax(out, dim=1)
+            for cls in range(1, n_classes):
+                inter[cls] += ((preds == cls) & (masks == cls)).sum()
+                union[cls] += ((preds == cls) | (masks == cls)).sum()
+    return torch.mean(inter[1:] / (union[1:] + 1e-6)).item()
 
 
-# 配置
-device = torch.device("cuda")
-root_path = '/home/pengfei/PFmodel/DataSets'
+def main(args):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-model = PFNet(n_classes=14)  # 这里的初始化不再传入全模型权重路径
-# 在这里进行全模型权重加载
-if os.path.exists(weight_path):
-    print(f"🔥 正在加载全模型权重进行微调: {weight_path}")
-    state_dict = torch.load(weight_path, map_location=device)
+    model = PFNet(n_classes=args.n_classes, pretrained_path=args.pretrained_encoder, return_aux=True)
+    if args.resume and os.path.exists(args.resume):
+        print(f"🔥 恢复训练权重: {args.resume}")
+        state_dict = torch.load(args.resume, map_location=device)
+        model.load_state_dict(state_dict, strict=False)
 
-    # 如果你是用 DataParallel 训练的，可能需要处理 'module.' 前缀
-    # new_state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+    if torch.cuda.device_count() > 1:
+        model = torch.nn.DataParallel(model)
+    model.to(device)
 
-    model.load_state_dict(state_dict)  # 这样就能完美对齐了
+    train_loader = DataLoader(NYUBaselineDataset(args.data_root, 'train'), batch_size=args.batch_size,
+                              shuffle=True, num_workers=args.num_workers)
+    val_loader = DataLoader(NYUBaselineDataset(args.data_root, 'val'), batch_size=args.batch_size,
+                            shuffle=False, num_workers=args.num_workers)
 
-if torch.cuda.device_count() > 1:
-    model = torch.nn.DataParallel(model)
-model.to(device)
+    ce_loss = nn.CrossEntropyLoss(ignore_index=0)
+    bce_loss = nn.BCEWithLogitsLoss()
 
-train_loader = DataLoader(NYUBaselineDataset(root_path, 'train'), batch_size=8, shuffle=True, num_workers=4)
-val_loader = DataLoader(NYUBaselineDataset(root_path, 'val'), batch_size=8, shuffle=False)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
 
-criterion = nn.CrossEntropyLoss(ignore_index=0)
-# 必须使用极小的学习率进行微调
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5, weight_decay=1e-4)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
+    os.makedirs(args.save_dir, exist_ok=True)
+    best_miou = 0.0
 
-best_miou = 0.0
-os.makedirs('Checkpoint', exist_ok=True)
+    for epoch in range(args.epochs):
+        model.train()
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{args.epochs}")
 
-for epoch in range(50):
-    model.train()
-    pbar = tqdm(train_loader, desc=f"Epoch {epoch}")
+        for rgb, hha, masks in pbar:
+            rgb, hha, masks = rgb.to(device), hha.to(device), masks.to(device)
+            optimizer.zero_grad()
 
-    for rgb, hha, masks in pbar:
-        # 将数据移至 GPU
-        rgb, hha, masks = rgb.to(device), hha.to(device), masks.to(device)
+            seg_logits, edge_logits = model(rgb, hha)
+            loss_seg = ce_loss(seg_logits, masks)
+            loss_dice = dice_loss(seg_logits, masks, ignore_index=0)
+            edge_tgt = edge_target_from_mask(masks)
+            loss_edge = bce_loss(edge_logits, edge_tgt)
 
-        # 1. 梯度清零
-        optimizer.zero_grad()
+            loss = loss_seg + args.lambda_dice * loss_dice + args.lambda_edge * loss_edge
+            loss.backward()
+            optimizer.step()
 
-        # 2. 前向传播：统一获取 outputs
-        outputs = model(rgb, hha)
+            pbar.set_postfix(total=f"{loss.item():.4f}", seg=f"{loss_seg.item():.4f}", edge=f"{loss_edge.item():.4f}")
 
-        # 3. 计算基础交叉熵损失 (保持维度，不求均值)
-        loss_ce = F.cross_entropy(outputs, masks, reduction='none')
+        scheduler.step()
+        miou = validate(model, val_loader, device=device, n_classes=args.n_classes)
+        print(f"Epoch {epoch + 1}: val mIoU = {miou:.4f}")
 
-        # 4. 计算并处理边界权重
-        # 假设 get_spatial_gradient 内部没有做去梯度操作，如果在其中不需要求导，
-        # 建议将其包裹在 torch.no_grad() 中以节省显存
-        with torch.no_grad():
-            edge_weight = get_spatial_gradient(hha)
-            # 限制范围，并直接 squeeze 到与 masks 相同的维度 (B, H, W)
-            edge_weight = torch.clamp(edge_weight, 0, 1).squeeze(1)
+        raw_model = model.module if hasattr(model, 'module') else model
+        torch.save(raw_model.state_dict(), os.path.join(args.save_dir, 'latest_model.pth'))
+        if miou > best_miou:
+            best_miou = miou
+            ckpt = os.path.join(args.save_dir, f'best_model_{best_miou:.3f}.pth')
+            torch.save(raw_model.state_dict(), ckpt)
+            print(f"✅ New best checkpoint: {ckpt}")
 
-            # 5. 边界加权融合损失并求均值
-        # 核心逻辑：边缘区域的 Loss 会被放大 (1 + edge_weight) 倍
-        loss = (loss_ce * (1.0 + edge_weight)).mean()
-
-        # 6. 反向传播与参数更新
-        loss.backward()
-        optimizer.step()
-
-        # 7. 更新进度条 (保留 4 位小数，看起来更清爽)
-        pbar.set_postfix(loss=f"{loss.item():.4f}")
-
-    # 每个 Epoch 结束后更新学习率
-    scheduler.step()
+    print(f"Training done. Best mIoU: {best_miou:.4f}")
 
 
-# ===================== 放在所有 epoch 结束之后 =====================
-# 最后统一计算一次 mIoU
-current_miou = validate(model, val_loader, device)
-print(f"Final mIoU after 10 epochs: {current_miou:.4f}")
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data-root', type=str, required=True)
+    parser.add_argument('--save-dir', type=str, default='Checkpoint')
+    parser.add_argument('--resume', type=str, default='')
+    parser.add_argument('--pretrained-encoder', type=str, default='')
+    parser.add_argument('--n-classes', type=int, default=14)
+    parser.add_argument('--batch-size', type=int, default=8)
+    parser.add_argument('--num-workers', type=int, default=4)
+    parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--lambda-dice', type=float, default=0.5)
+    parser.add_argument('--lambda-edge', type=float, default=0.2)
+    args = parser.parse_args()
 
-# 最后保存最终模型
-raw_model = model.module if hasattr(model, "module") else model
-torch.save(raw_model.state_dict(), f"Checkpoint/best_model_{current_miou:.3f}.pth")
+    main(args)
