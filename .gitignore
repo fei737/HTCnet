@@ -18,6 +18,8 @@ runs/
 logs/
 *.log
 result_*.png
+results/
+getDATA/
 
 # Python cache
 __pycache__/
