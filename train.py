@@ -151,13 +151,18 @@ def main(args):
     bce_loss = nn.BCEWithLogitsLoss()
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
+    if args.scheduler == 'cosine':
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=args.min_lr)
+    else:
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
 
     os.makedirs(args.save_dir, exist_ok=True)
     best_miou = 0.0
 
     for epoch in range(args.epochs):
         model.train()
+        warmup_ratio = min(1.0, float(epoch + 1) / max(1, args.edge_warmup_epochs))
+        edge_lambda = args.lambda_edge * warmup_ratio
         pbar = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{args.epochs}")
 
         for rgb, hha, masks in pbar:
@@ -170,11 +175,16 @@ def main(args):
             edge_tgt = edge_target_from_mask(masks)
             loss_edge = bce_loss(edge_logits, edge_tgt)
 
-            loss = loss_seg + args.lambda_dice * loss_dice + args.lambda_edge * loss_edge
+            loss = loss_seg + args.lambda_dice * loss_dice + edge_lambda * loss_edge
             loss.backward()
             optimizer.step()
 
-            pbar.set_postfix(total=f"{loss.item():.4f}", seg=f"{loss_seg.item():.4f}", edge=f"{loss_edge.item():.4f}")
+            pbar.set_postfix(
+                total=f"{loss.item():.4f}",
+                seg=f"{loss_seg.item():.4f}",
+                edge=f"{loss_edge.item():.4f}",
+                edge_w=f"{edge_lambda:.3f}"
+            )
 
         scheduler.step()
         miou = validate(model, val_loader, device=device, n_classes=args.n_classes)
@@ -204,6 +214,9 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--lambda-dice', type=float, default=0.5)
     parser.add_argument('--lambda-edge', type=float, default=0.2)
+    parser.add_argument('--edge-warmup-epochs', type=int, default=10)
+    parser.add_argument('--scheduler', type=str, default='step', choices=['step', 'cosine'])
+    parser.add_argument('--min-lr', type=float, default=1e-6)
     args = parser.parse_args()
 
     main(args)
