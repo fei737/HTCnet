@@ -85,72 +85,105 @@ class ACMFFusion(nn.Module):
         # 3. 注入几何引导残差
         return self.refine(fused_dynamic + geo_feat)
 
-# --- 主模型 ---
-class PFNet(nn.Module):
-    def __init__(self, n_classes=14, pretrained_path=None):
-        super(PFNet, self).__init__()
 
-        # 1. 先初始化 Encoders (这必须在第一步，否则拿不到通道数)
-        self.rgb_encoder = smp.encoders.get_encoder("mit_b0", in_channels=3,weights=None)
-        self.hha_encoder = smp.encoders.get_encoder("mit_b0", in_channels=3,weights=None)
+class TriModalFusion(nn.Module):
+    """RGB + HD + BE 三分支融合."""
+    def __init__(self, channels):
+        super().__init__()
+        self.rgb_gate = nn.Conv2d(channels, 1, kernel_size=1)
+        self.hd_gate = nn.Conv2d(channels, 1, kernel_size=1)
+        self.be_gate = nn.Conv2d(channels, 1, kernel_size=1)
+        self.project = nn.Sequential(
+            nn.Conv2d(channels * 3, channels, kernel_size=1),
+            nn.BatchNorm2d(channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(channels),
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, rgb_feat, hd_feat, be_feat):
+        # 用 BE 特征生成空间门控，显式加强边界区域
+        g_rgb = torch.sigmoid(self.rgb_gate(be_feat))
+        g_hd = torch.sigmoid(self.hd_gate(be_feat))
+        g_be = torch.sigmoid(self.be_gate(be_feat))
+        fused = torch.cat([rgb_feat * (1.0 + g_rgb), hd_feat * (1.0 + g_hd), be_feat * (1.0 + g_be)], dim=1)
+        return self.project(fused)
+
+
+# --- 主模型（三分支） ---
+class PFNet(nn.Module):
+    def __init__(self, n_classes=14, pretrained_path=None, return_aux=False):
+        super(PFNet, self).__init__()
+        self.return_aux = return_aux
+
+        # 三分支编码器：RGB / HHA(H,D) / HHA(A,Grad)
+        self.rgb_encoder = smp.encoders.get_encoder("mit_b0", in_channels=3, weights=None)
+        self.hd_encoder = smp.encoders.get_encoder("mit_b0", in_channels=2, weights=None)
+        self.be_encoder = smp.encoders.get_encoder("mit_b0", in_channels=2, weights=None)
 
         if pretrained_path and os.path.exists(pretrained_path):
             print(f"正在从本地加载预训练权重: {pretrained_path}")
             state_dict = torch.load(pretrained_path, map_location='cpu')
             self.rgb_encoder.load_state_dict(state_dict)
-            self.hha_encoder.load_state_dict(state_dict)
+            self.hd_encoder.load_state_dict(state_dict, strict=False)
+            self.be_encoder.load_state_dict(state_dict, strict=False)
             print("✅ 预训练权重加载成功！")
         else:
             print("⚠️ 未发现预训练权重，将使用随机初始化训练")
 
-        # 2. 定义几何引导和融合模块
-        self.geo_blocks = nn.ModuleList()
+        # 每个尺度分配一个融合模块
         self.fusion_layers = nn.ModuleList()
         self.valid_indices = []
-
-        encoder_channels = self.rgb_encoder.out_channels  # mit_b0: [3, 32, 64, 160, 256]
+        encoder_channels = self.rgb_encoder.out_channels  # [3, 32, 64, 160, 256]
 
         for i in range(1, len(encoder_channels)):
             ch = encoder_channels[i]
             if ch > 0:
-                # 每个尺度分配一个双感知块和一个引导融合层
-                self.geo_blocks.append(DualPerceptionGeoBlock(ch))
-                self.fusion_layers.append(ACMFFusion(ch))
+                self.fusion_layers.append(TriModalFusion(ch))
                 self.valid_indices.append(i)
 
-        # 3. 初始化 Decoder
+        # Decoder
         temp_model = smp.Segformer(encoder_name="mit_b0", in_channels=3, classes=n_classes, encoder_weights=None)
         self.decoder = temp_model.decoder
+        # 边界辅助头（来自高分辨率融合特征）
+        self.edge_head = nn.Sequential(
+            nn.Conv2d(encoder_channels[1], encoder_channels[1], kernel_size=3, padding=1),
+            nn.BatchNorm2d(encoder_channels[1]),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(encoder_channels[1], 1, kernel_size=1)
+        )
 
     def forward(self, rgb, hha):
         input_size = rgb.shape[2:]
+        # 构建两路几何输入
+        hd = hha[:, 0:2, :, :]
+        angle = hha[:, 2:3, :, :]
+        grad = get_spatial_gradient(hha)
+        be = torch.cat([angle, grad], dim=1)
 
-        # 提取主干特征
+        # 提取三分支特征
         features_rgb = self.rgb_encoder(rgb)
-        features_hha = self.hha_encoder(hha)
+        features_hd = self.hd_encoder(hd)
+        features_be = self.be_encoder(be)
 
         fused_list = []
         fusion_idx = 0
 
         for i in range(1, len(features_rgb)):
             if i in self.valid_indices:
-                # 针对当前分辨率下采样 HHA
-                curr_hha = F.interpolate(hha, size=features_rgb[i].shape[2:], mode='bilinear', align_corners=False)
-
-                # 1. 结合 A通道 与 梯度 得到几何引导特征
-                geo_guidance = self.geo_blocks[fusion_idx](curr_hha)
-
-                # 2. 执行三路融合 (RGB + HHA + Geo)
-                fused = self.fusion_layers[fusion_idx](features_rgb[i], features_hha[i], geo_guidance)
-
+                fused = self.fusion_layers[fusion_idx](features_rgb[i], features_hd[i], features_be[i])
                 fused_list.append(fused)
                 fusion_idx += 1
             else:
-                # 如果是跳层或其他情况
                 fused_list.append(features_rgb[i])
 
-        # Segformer Decoder 需要第一个特征图(通常是原始输入缩小版)加上融合后的特征
         final_fused_features = [features_rgb[0]] + fused_list
+        seg_logits = self.decoder(final_fused_features)
+        seg_logits = F.interpolate(seg_logits, size=input_size, mode='bilinear', align_corners=False)
+        if not self.return_aux:
+            return seg_logits
 
-        output = self.decoder(final_fused_features)
-        return F.interpolate(output, size=input_size, mode='bilinear', align_corners=False)
+        edge_logits = self.edge_head(fused_list[0])
+        edge_logits = F.interpolate(edge_logits, size=input_size, mode='bilinear', align_corners=False)
+        return seg_logits, edge_logits
