@@ -6,6 +6,17 @@ import segmentation_models_pytorch as smp
 
 
 # --- 工具函数 ---
+def safe_load_state_dict(module, state_dict, strict=True):
+    """
+    兼容某些第三方模块重载 load_state_dict 且不接受 strict 参数的情况。
+    """
+    try:
+        return module.load_state_dict(state_dict, strict=strict)
+    except TypeError:
+        # 回退到 nn.Module 的原生实现
+        return nn.Module.load_state_dict(module, state_dict, strict=strict)
+
+
 def get_spatial_gradient(hha):
     kernel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]],
                             dtype=hha.dtype, device=hha.device).view(1, 1, 3, 3)
@@ -125,9 +136,9 @@ class PFNet(nn.Module):
         if pretrained_path and os.path.exists(pretrained_path):
             print(f"正在从本地加载预训练权重: {pretrained_path}")
             state_dict = torch.load(pretrained_path, map_location='cpu')
-            self.rgb_encoder.load_state_dict(state_dict)
-            self.hd_encoder.load_state_dict(state_dict, strict=False)
-            self.be_encoder.load_state_dict(state_dict, strict=False)
+            safe_load_state_dict(self.rgb_encoder, state_dict, strict=False)
+            safe_load_state_dict(self.hd_encoder, state_dict, strict=False)
+            safe_load_state_dict(self.be_encoder, state_dict, strict=False)
             print("✅ 预训练权重加载成功！")
         else:
             print("⚠️ 未发现预训练权重，将使用随机初始化训练")
