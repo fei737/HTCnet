@@ -1,114 +1,156 @@
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import segmentation_models_pytorch as smp
 
 
-# 1. 差分引导模块（DGM）
-class DGM(nn.Module):
-    def __init__(self, in_channels):
-        super(DGM, self).__init__()
-        self.conv = nn.Conv2d(in_channels, in_channels, 1, 1, 0)  # 1×1卷积
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, f_r, f_m):
-        # f_r: RGB分支特征, f_m: RGB-D分支特征（C×H×W）
-        f_n = f_r - f_m  # 元素相减（公式2）
-        # GAP + GMP
-        gap = torch.mean(f_n, dim=[2, 3], keepdim=True)
-        gmp = torch.max(f_n, dim=[2, 3], keepdim=True)[0]
-        # 生成通道注意力
-        att = self.sigmoid(self.conv(torch.cat([gap, gmp], dim=1)))
-        # 特征加权 + 残差连接
-        f_r_enhanced = f_r * att + f_r
-        return f_r_enhanced
+# --- 工具函数 ---
+def get_spatial_gradient(hha):
+    kernel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]],
+                            dtype=hha.dtype, device=hha.device).view(1, 1, 3, 3)
+    kernel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]],
+                            dtype=hha.dtype, device=hha.device).view(1, 1, 3, 3)
+    # 假设 HHA 的 A 通道在索引 2
+    a_channel = hha[:, 2:3, :, :]
+    grad_x = F.conv2d(a_channel, kernel_x, padding=1)
+    grad_y = F.conv2d(a_channel, kernel_y, padding=1)
+    return torch.abs(grad_x) + torch.abs(grad_y)
 
 
-# 2. 融合感知模块（FPM）
-class FPM(nn.Module):
-    def __init__(self, in_channels):
-        super(FPM, self).__init__()
-        self.softmax = nn.Softmax(dim=-1)
-
-    def forward(self, f_m, f_d):
-        # f_m: RGB-D分支特征, f_d: 深度分支特征（C×H×W）
-        B, C, H, W = f_d.shape
-        # 元素相加融合
-        f_fuse = f_m + f_d
-        # Reshape生成空间注意力
-        f_c = f_fuse.view(B, C, -1)  # B×C×HW
-        att_spatial = self.softmax(torch.matmul(f_c.transpose(1, 2), f_c))  # B×HW×HW
-        # 注意力加权
-        f_d_reshaped = f_d.view(B, C, -1)  # B×C×HW
-        f_d_att = torch.matmul(f_d_reshaped, att_spatial)  # B×C×HW
-        f_d_att = f_d_att.view(B, C, H, W)
-        # 残差连接
-        f_d_enhanced = f_d_att + f_d
-        return f_d_enhanced
-
-
-# 3. 跨模态特征细化模块（CFRM）
-class CFRM(nn.Module):
-    def __init__(self, in_channels):
-        super(CFRM, self).__init__()
-        # 空间注意力（RGB分支）
-        self.spatial_att = nn.Sequential(
-            nn.Conv2d(in_channels, 1, 3, 1, 1),
-            nn.Sigmoid()
+# --- 几何感知模块 ---
+class DualPerceptionGeoBlock(nn.Module):
+    def __init__(self, out_channels):
+        super().__init__()
+        self.angle_path = nn.Sequential(
+            nn.Conv2d(1, out_channels // 2, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels // 2),
+            nn.ReLU(inplace=True)
         )
-        # 通道注意力（深度分支）
-        self.channel_att = nn.Sequential(
+        self.grad_path = nn.Sequential(
+            nn.Conv2d(1, out_channels // 2, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels // 2),
+            nn.ReLU(inplace=True)
+        )
+        self.compress = nn.Sequential(
+            nn.Conv2d(out_channels, out_channels, kernel_size=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, hha):
+        angle = hha[:, 2:3, :, :]
+        grad = get_spatial_gradient(hha)
+        feat_angle = self.angle_path(angle)
+        feat_grad = self.grad_path(grad)
+        return self.compress(torch.cat([feat_angle, feat_grad], dim=1))
+
+
+# --- 最终融合层 ---
+class ACMFFusion(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        # 门控权重生成
+        self.gate = nn.Sequential(
+            nn.Conv2d(channels, channels // 4, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channels // 4, 2, kernel_size=1),
+            nn.Softmax(dim=1)
+        )
+        # 新增：通道感知，借鉴 DFormerv2 的全局对齐
+        self.channel_attn = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(in_channels, in_channels, 1, 1, 0),
+            nn.Conv2d(channels, channels, kernel_size=1),
             nn.Sigmoid()
         )
-        # 融合分支：1×1卷积 + 空洞卷积（r=2,4）
-        self.conv1x1 = nn.Conv2d(in_channels, in_channels, 1, 1, 0)
-        self.dilated_conv2 = nn.Conv2d(in_channels, in_channels, 3, 1, 2, dilation=2)
-        self.dilated_conv4 = nn.Conv2d(in_channels, in_channels, 3, 1, 4, dilation=4)
-        self.conv_fuse = nn.Conv2d(in_channels * 3, in_channels, 1, 1, 0)
+        # 特征精炼层
+        self.refine = nn.Sequential(
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(channels),
+            nn.ReLU(inplace=True)
+        )
 
-    def forward(self, f_r, f_d, f_m):
-        # RGB分支：空间注意力
-        spatial_att = self.spatial_att(f_r)
-        f_r_spatial = f_r * spatial_att
-        # 深度分支：通道注意力
-        channel_att = self.channel_att(f_d)
-        f_d_channel = f_d * channel_att
-        # 跨模态引导
-        f_d_enhanced = f_d_channel + f_r_spatial
-        f_r_enhanced = f_r_spatial + f_d_channel
+    def forward(self, rgb, hha, geo_feat):
+        # 1. 产生自适应权重
+        weights = self.gate(geo_feat)
+        w_rgb = weights[:, 0:1, :, :]
+        w_hha = weights[:, 1:2, :, :]
 
-        # 融合分支：多尺度空洞卷积
-        f_m_1x1 = self.conv1x1(f_m)
-        f_m_d2 = self.dilated_conv2(f_m)
-        f_m_d4 = self.dilated_conv4(f_m)
-        f_m_multi = self.conv_fuse(torch.cat([f_m_1x1, f_m_d2, f_m_d4], dim=1))
-        # 空间注意力增强
-        gap_m = torch.mean(f_m_multi, dim=[2, 3], keepdim=True)
-        gmp_m = torch.max(f_m_multi, dim=[2, 3], keepdim=True)[0]
-        att_m = torch.sigmoid(torch.cat([gap_m, gmp_m], dim=1))
-        f_m_enhanced = f_m_multi * att_m
+        # 1. 动态融合
+        fused_dynamic = (rgb * 0.5 + rgb * 0.5 * w_rgb) + (hha * w_hha)
 
-        return f_r_enhanced, f_d_enhanced, f_m_enhanced
+        # 2. 通道重加权：利用几何特征指导哪些通道（语义）更重要
+        fused_dynamic = fused_dynamic * self.channel_attn(geo_feat)
 
+        # 3. 注入几何引导残差
+        return self.refine(fused_dynamic + geo_feat)
 
-# 4. 语义引导模块（SGM）
-class SGM(nn.Module):
-    def __init__(self, in_channels):
-        super(SGM, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, in_channels, 1, 1, 0)
-        self.conv2 = nn.Conv2d(in_channels, in_channels, 1, 1, 0)
-        self.bn = nn.BatchNorm2d(in_channels)
+# --- 主模型 ---
+class PFNet(nn.Module):
+    def __init__(self, n_classes=14, pretrained_path=None):
+        super(PFNet, self).__init__()
 
-    def forward(self, f_curr, f_prev):
-        # f_curr: 当前层特征（i层）, f_prev: 前一层特征（i-1层）
-        # 生成通道注意力
-        gap = torch.mean(f_curr, dim=[2, 3], keepdim=True)
-        att_channel = self.conv2(self.conv1(gap))
-        att_channel = torch.sigmoid(att_channel)
-        # 特征加权 + 上采样
-        f_curr_att = f_curr * att_channel
-        f_curr_up = F.interpolate(f_curr_att, size=f_prev.shape[2:], mode='bilinear', align_corners=False)
-        # 引导前一层特征
-        f_prev_enhanced = f_prev * f_curr_up
-        return f_prev_enhanced
+        # 1. 先初始化 Encoders (这必须在第一步，否则拿不到通道数)
+        self.rgb_encoder = smp.encoders.get_encoder("mit_b0", in_channels=3,weights=None)
+        self.hha_encoder = smp.encoders.get_encoder("mit_b0", in_channels=3,weights=None)
+
+        if pretrained_path and os.path.exists(pretrained_path):
+            print(f"正在从本地加载预训练权重: {pretrained_path}")
+            state_dict = torch.load(pretrained_path, map_location='cpu')
+            self.rgb_encoder.load_state_dict(state_dict)
+            self.hha_encoder.load_state_dict(state_dict)
+            print("✅ 预训练权重加载成功！")
+        else:
+            print("⚠️ 未发现预训练权重，将使用随机初始化训练")
+
+        # 2. 定义几何引导和融合模块
+        self.geo_blocks = nn.ModuleList()
+        self.fusion_layers = nn.ModuleList()
+        self.valid_indices = []
+
+        encoder_channels = self.rgb_encoder.out_channels  # mit_b0: [3, 32, 64, 160, 256]
+
+        for i in range(1, len(encoder_channels)):
+            ch = encoder_channels[i]
+            if ch > 0:
+                # 每个尺度分配一个双感知块和一个引导融合层
+                self.geo_blocks.append(DualPerceptionGeoBlock(ch))
+                self.fusion_layers.append(ACMFFusion(ch))
+                self.valid_indices.append(i)
+
+        # 3. 初始化 Decoder
+        temp_model = smp.Segformer(encoder_name="mit_b0", in_channels=3, classes=n_classes, encoder_weights=None)
+        self.decoder = temp_model.decoder
+
+    def forward(self, rgb, hha):
+        input_size = rgb.shape[2:]
+
+        # 提取主干特征
+        features_rgb = self.rgb_encoder(rgb)
+        features_hha = self.hha_encoder(hha)
+
+        fused_list = []
+        fusion_idx = 0
+
+        for i in range(1, len(features_rgb)):
+            if i in self.valid_indices:
+                # 针对当前分辨率下采样 HHA
+                curr_hha = F.interpolate(hha, size=features_rgb[i].shape[2:], mode='bilinear', align_corners=False)
+
+                # 1. 结合 A通道 与 梯度 得到几何引导特征
+                geo_guidance = self.geo_blocks[fusion_idx](curr_hha)
+
+                # 2. 执行三路融合 (RGB + HHA + Geo)
+                fused = self.fusion_layers[fusion_idx](features_rgb[i], features_hha[i], geo_guidance)
+
+                fused_list.append(fused)
+                fusion_idx += 1
+            else:
+                # 如果是跳层或其他情况
+                fused_list.append(features_rgb[i])
+
+        # Segformer Decoder 需要第一个特征图(通常是原始输入缩小版)加上融合后的特征
+        final_fused_features = [features_rgb[0]] + fused_list
+
+        output = self.decoder(final_fused_features)
+        return F.interpolate(output, size=input_size, mode='bilinear', align_corners=False)
