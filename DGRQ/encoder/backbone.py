@@ -4,7 +4,7 @@ import segmentation_models_pytorch as smp
 import torch
 import torch.nn as nn
 
-from .common import is_main_process, set_encoder_drop_path
+from .common import LearnableGate, is_main_process, set_encoder_drop_path
 from .fusion import CrossScaleFeatureAligner, LocalSemanticFusionBlock, StripPyramidASPP
 from .geometry import (
     AngularBoundaryDescriptor,
@@ -149,16 +149,20 @@ class UncertaintyGuidedFusionEncoder(nn.Module):
         deepest_ch = self.encoder_channels[-1]
         self.aspp = StripPyramidASPP(deepest_ch, deepest_ch)
 
+        # Learnable replacements for the fixed confidence affines in forward().
+        self.conf_gate = LearnableGate(init_lo=0.5, init_span=0.5)
+        self.hha_guide_gate = LearnableGate(init_lo=0.25, init_span=0.75)
+
     def forward(self, rgb, hha, return_context=False):
-        hha_confidence = 0.5 + 0.5 * self.mueb(hha)
+        hha_confidence = self.conf_gate(self.mueb(hha))
         if self.use_prompt_recovery:
             if self.prompt_recovery_mode == "rgpr":
                 hha = self.hha_recovery(hha, hha_confidence, rgb)
             else:
                 hha = self.hha_recovery(hha, hha_confidence)
-            hha_confidence = 0.5 + 0.5 * self.mueb(hha)
+            hha_confidence = self.conf_gate(self.mueb(hha))
         hd = hha[:, 0:2, :, :]
-        hha_guided = hha * (0.25 + 0.75 * hha_confidence)
+        hha_guided = hha * self.hha_guide_gate(hha_confidence)
         hd = self.bsde(hd * hha_confidence)
         angle_grad = self.agfd(hha_guided) * hha_confidence
         geometry_reliability = hha_confidence

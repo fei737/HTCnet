@@ -7,7 +7,7 @@ import torch.utils.checkpoint as cp
 
 from GSA import Decomposed_GSA, GeoPriorGen
 
-from .common import ConvBNAct
+from .common import ConvBNAct, LearnableBlend, LearnableGate
 
 
 def projection_block(in_channels, out_channels):
@@ -228,11 +228,24 @@ class LocalSemanticFusionBlock(nn.Module):
         self.semantic_scale = nn.Parameter(torch.ones(1, out_channels, 1, 1) * float(semantic_scale_init))
         self.delta_reliability_scale = nn.Parameter(torch.tensor(0.0))
 
+        # Learnable replacements for the fixed confidence/reliability affines.
+        self.sft_gamma_scale = nn.Parameter(torch.tensor(0.25))
+        self.sft_beta_scale = nn.Parameter(torch.tensor(0.25))
+        self.hd_conf_gate = LearnableGate(init_lo=0.5, init_span=0.5)
+        self.rel_blend = LearnableBlend(2, ctx_channels=2, init_bias=(0.65, 0.35))
+        self.rel_conf_gate = LearnableGate(init_lo=0.5, init_span=0.5)
+        self.aux_conf_gate = LearnableGate(init_lo=0.25, init_span=0.75)
+        self.semantic_rel_gate = LearnableGate(init_lo=0.25, init_span=0.75)
+        # reliability_support: base + span * confidence_mean.
+        self.rel_support_gate = LearnableGate(init_lo=0.35, init_span=0.45 + self.reliability_strength)
+        self.local_router_gain = nn.Parameter(torch.tensor(0.30))
+        self.semantic_router_gain = nn.Parameter(torch.tensor(0.30))
+
     def _local_branch(self, rgb_feat, hd_feat, aux_feat):
         condition = self.condition_proj(torch.cat([hd_feat, aux_feat], dim=1))
         rgb_aligned = warp_with_offsets(rgb_feat, self.offset_head(condition))
-        gamma = 0.25 * torch.tanh(self.sft_gamma(condition))
-        beta = 0.25 * torch.tanh(self.sft_beta(condition))
+        gamma = self.sft_gamma_scale * torch.tanh(self.sft_gamma(condition))
+        beta = self.sft_beta_scale * torch.tanh(self.sft_beta(condition))
         rgb_modulated = rgb_aligned * (1.0 + gamma) + beta
 
         hd_norm = F.normalize(hd_feat, dim=1, eps=1e-6)
@@ -288,7 +301,7 @@ class LocalSemanticFusionBlock(nn.Module):
         rgb_feat = self.rgb_proj(rgb_feat)
         hd_feat = self.hd_proj(hd_feat)
         aux_feat = self.aux_proj(aux_feat)
-        hd_confidence = 0.5 + 0.5 * self.hd_confidence(torch.cat([rgb_feat, hd_feat, aux_feat], dim=1))
+        hd_confidence = self.hd_conf_gate(self.hd_confidence(torch.cat([rgb_feat, hd_feat, aux_feat], dim=1)))
         rel = None
         if geometry_reliability is not None:
             rel = F.interpolate(
@@ -298,11 +311,14 @@ class LocalSemanticFusionBlock(nn.Module):
                 align_corners=False,
             ).clamp(0.0, 1.0)
             if self.routing_mode == "rcfr":
-                hd_confidence = (0.65 * hd_confidence + 0.35 * rel).clamp(0.0, 1.0)
+                hd_confidence = self.rel_blend(
+                    [hd_confidence, rel],
+                    torch.cat([hd_confidence, rel], dim=1),
+                ).clamp(0.0, 1.0)
             else:
-                hd_confidence = hd_confidence * (0.5 + 0.5 * rel)
+                hd_confidence = hd_confidence * self.rel_conf_gate(rel)
         hd_feat = hd_feat * hd_confidence
-        aux_feat = aux_feat * (0.25 + 0.75 * hd_confidence)
+        aux_feat = aux_feat * self.aux_conf_gate(hd_confidence)
 
         if self.fusion_branch_mode == "rgb":
             return rgb_feat
@@ -346,9 +362,9 @@ class LocalSemanticFusionBlock(nn.Module):
                 scale_map,
             ], dim=1)
             reliability_gate = self.reliability_router(reliability_context)
-            reliability_support = 0.35 + (0.45 + self.reliability_strength) * confidence_mean
-            local_delta = local_delta * (reliability_support + 0.30 * reliability_gate[:, 0:1])
-            semantic_delta = semantic_delta * (reliability_support + 0.30 * reliability_gate[:, 1:2])
+            reliability_support = self.rel_support_gate(confidence_mean)
+            local_delta = local_delta * (reliability_support + self.local_router_gain * reliability_gate[:, 0:1])
+            semantic_delta = semantic_delta * (reliability_support + self.semantic_router_gain * reliability_gate[:, 1:2])
         elif geometry_reliability is not None:
             semantic_reliability = F.adaptive_avg_pool2d(
                 F.interpolate(
@@ -359,7 +375,7 @@ class LocalSemanticFusionBlock(nn.Module):
                 ).clamp(0.0, 1.0),
                 1,
             )
-            semantic_delta = semantic_delta * (0.25 + 0.75 * semantic_reliability)
+            semantic_delta = semantic_delta * self.semantic_rel_gate(semantic_reliability)
         return rgb_feat + route[:, 0:1] * local_delta + route[:, 1:2] * semantic_delta
 
 

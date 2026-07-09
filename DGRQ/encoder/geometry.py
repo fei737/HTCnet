@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 from mamba_layout import GeometryStateSpaceScan
 
-from .common import ConvBNAct, ConvGNAct, make_group_count
+from .common import ConvBNAct, ConvGNAct, LearnableBlend, LearnableGate, make_group_count
 
 
 class StructuralContrastEnhancer(nn.Module):
@@ -222,6 +222,11 @@ class CrossModalReliabilityEstimator(nn.Module):
         )
         nn.init.zeros_(self.router[-1].weight)
         nn.init.constant_(self.router[-1].bias, 1.0)
+        # Per-pixel learnable blends replace the fixed 0.5/0.5 and 0.65/0.35
+        # convex combinations; a learnable floor replaces the hard clamp(0.05,1).
+        self.consistency_blend = LearnableBlend(2, ctx_channels=3, init_bias=(0.5, 0.5))
+        self.reliability_blend = LearnableBlend(2, ctx_channels=5, init_bias=(0.65, 0.35))
+        self.reliability_floor = LearnableGate(init_lo=0.05, init_span=0.95)
 
     def forward(self, rgb, hha, angle_grad, confidence):
         if rgb.shape[2:] != hha.shape[2:]:
@@ -237,8 +242,15 @@ class CrossModalReliabilityEstimator(nn.Module):
         learned_agreement = torch.sigmoid(
             self.router(torch.cat([rgb_edge, hha_edge, angle_edge, edge_gap, confidence, structural_agreement], dim=1))
         )
-        consistency = 0.5 * structural_agreement + 0.5 * learned_agreement
-        return (0.65 * confidence + 0.35 * consistency).clamp(0.05, 1.0)
+        consistency = self.consistency_blend(
+            [structural_agreement, learned_agreement],
+            torch.cat([structural_agreement, learned_agreement, edge_gap], dim=1),
+        )
+        reliability = self.reliability_blend(
+            [confidence, consistency],
+            torch.cat([confidence, consistency, edge_gap, rgb_edge, hha_edge], dim=1),
+        )
+        return self.reliability_floor(reliability.clamp(0.0, 1.0)).clamp(0.0, 1.0)
 
 
 class StructuralPromptFilter(nn.Module):
@@ -263,13 +275,14 @@ class StructuralPromptFilter(nn.Module):
             nn.BatchNorm2d(channels),
         )
         self.layer_scale = nn.Parameter(torch.ones(1, channels, 1, 1) * 1e-4)
+        self.guide_gate = LearnableGate(init_lo=0.5, init_span=0.5)
 
     def forward(self, hd_feat, guide_feat):
         low_freq = self.smooth(hd_feat)
         structure_base = self.low_proj(low_freq)
         high_freq = hd_feat - low_freq
         guide_map = guide_feat.mean(dim=1, keepdim=True)
-        guide_map = self.guide_proj(guide_feat) * (0.5 + 0.5 * guide_map.sigmoid())
+        guide_map = self.guide_proj(guide_feat) * self.guide_gate(guide_map.sigmoid())
         texture_keep = self.texture_gate(torch.cat([structure_base, guide_map], dim=1))
         filtered = structure_base + high_freq * texture_keep * guide_map
         return hd_feat + self.layer_scale * self.out_proj(filtered)
@@ -316,6 +329,7 @@ class DirectionalEdgePromptRefiner(nn.Module):
             nn.Conv2d(hidden_channels, channels, kernel_size=1),
         )
         self.layer_scale = nn.Parameter(torch.ones(1, channels, 1, 1) * 1e-4)
+        self.residual_gate = LearnableGate(init_lo=0.25, init_span=0.75)
         nn.init.zeros_(self.out_proj[-1].weight)
         nn.init.zeros_(self.out_proj[-1].bias)
 
@@ -345,7 +359,7 @@ class DirectionalEdgePromptRefiner(nn.Module):
             v_edge * direction_gate[:, 1:2],
         ], dim=1)
         residual = self.out_proj(directional)
-        residual_gate = 0.25 + 0.75 * reliability
+        residual_gate = self.residual_gate(reliability)
         return boundary_prompt + self.layer_scale * residual_gate * residual
 
 
@@ -383,6 +397,7 @@ class ReliabilityAwareAutocorrelationPromptMixer(nn.Module):
         )
         self.out_proj = nn.Conv2d(hidden_channels, channels, kernel_size=1)
         self.layer_scale = nn.Parameter(torch.ones(1, channels, 1, 1) * 1e-3)
+        self.residual_gate = LearnableGate(init_lo=0.25, init_span=0.75)
         nn.init.zeros_(self.out_proj.weight)
         nn.init.zeros_(self.out_proj.bias)
 
@@ -427,7 +442,7 @@ class ReliabilityAwareAutocorrelationPromptMixer(nn.Module):
         gate = self.gate(torch.cat([hidden, corr, reliability], dim=1))
         mixed = self.dwconv(hidden + torch.tanh(self.corr_scale) * corr)
         residual = self.out_proj(F.gelu(mixed) * gate)
-        residual_gate = 0.25 + 0.75 * reliability
+        residual_gate = self.residual_gate(reliability)
         return prompt_feat + self.layer_scale * residual_gate * residual
 
 
@@ -517,6 +532,18 @@ class FrequencyAwareGeometryPrompt(nn.Module):
             nn.Parameter(torch.ones(1, ch, 1, 1) * 0.1)
             for ch in out_channels_list
         ])
+        # Per-scale learnable layout/boundary mixing. The depth prior
+        # (0.25 + 0.50 * depth_prior) is kept only as the initial value; the
+        # base and the gains on the learned/spatial/uncertainty terms are now
+        # trained instead of hard-coded.
+        num_layout_scales = max(1, len(out_channels_list) - 1)
+        self.layout_weight_base = nn.ParameterList([
+            nn.Parameter(torch.tensor(0.25 + 0.50 * (float(idx) / float(num_layout_scales))))
+            for idx in range(len(out_channels_list))
+        ])
+        self.layout_learned_gain = nn.Parameter(torch.tensor(0.25))
+        self.layout_spatial_gain = nn.Parameter(torch.tensor(0.20))
+        self.layout_uncertainty_gain = nn.Parameter(torch.tensor(float(self.reliability_strength)))
         self.autocorr_layers = nn.ModuleList([
             ReliabilityAwareAutocorrelationPromptMixer(ch, patch_size=autocorr_patch_size)
             for ch in out_channels_list
@@ -541,20 +568,19 @@ class FrequencyAwareGeometryPrompt(nn.Module):
             spatial_logits = None
 
         prompts = []
-        num_scales = max(1, len(target_sizes) - 1)
         for idx, (proj, scale, size) in enumerate(zip(self.proj_layers, self.prompt_scales, target_sizes)):
-            depth_prior = float(idx) / float(num_scales)
+            base = self.layout_weight_base[idx]
             learned_layout_weight = torch.sigmoid(router_logits[:, idx:idx + 1])
             if self.routing_mode == "rcfr":
                 spatial_layout_weight = torch.sigmoid(spatial_logits[:, idx:idx + 1])
                 layout_weight = (
-                    (0.20 + 0.45 * depth_prior)
-                    + 0.15 * learned_layout_weight
-                    + 0.20 * spatial_layout_weight
-                    + self.reliability_strength * uncertainty
+                    base
+                    + self.layout_learned_gain * learned_layout_weight
+                    + self.layout_spatial_gain * spatial_layout_weight
+                    + self.layout_uncertainty_gain * uncertainty
                 ).clamp(0.10, 0.90)
             else:
-                layout_weight = (0.25 + 0.50 * depth_prior) + 0.25 * learned_layout_weight
+                layout_weight = (base + self.layout_learned_gain * learned_layout_weight).clamp(0.05, 0.95)
             boundary_weight = 1.0 - layout_weight
             prompt = layout_weight * layout_prompt + boundary_weight * boundary_prompt
             prompt_i = F.interpolate(prompt, size=size, mode="bilinear", align_corners=False)

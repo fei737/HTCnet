@@ -24,6 +24,76 @@ def make_group_count(channels, max_groups=32):
     return groups
 
 
+class LearnableGate(nn.Module):
+    """Replaces a fixed affine remap ``lo + span * x`` with a learnable one.
+
+    The classic pattern in this codebase is ``0.5 + 0.5 * conf`` or
+    ``0.25 + 0.75 * reliability``: a hand-tuned floor and span applied to a
+    gate in ``[0, 1]``. Here the floor and span are learned but kept inside
+    ``[0, 1]`` through a sigmoid parameterization, so the output stays a valid
+    gate while the exact mixing ratio adapts to the data.
+
+    ``init_lo`` / ``init_span`` set the starting point so a fresh model begins
+    near the original hand-tuned behaviour and drifts from there.
+    """
+
+    def __init__(self, init_lo=0.5, init_span=0.5, eps=1e-4):
+        super().__init__()
+        init_lo = float(min(max(init_lo, eps), 1.0 - eps))
+        init_span = float(min(max(init_span, eps), 1.0 - eps))
+        # Store pre-sigmoid logits so the learned values remain in (0, 1).
+        self._lo = nn.Parameter(torch.logit(torch.tensor(init_lo)))
+        self._span = nn.Parameter(torch.logit(torch.tensor(init_span)))
+
+    def forward(self, x):
+        lo = torch.sigmoid(self._lo)
+        span = torch.sigmoid(self._span)
+        return lo + span * x
+
+
+class LearnableBlend(nn.Module):
+    """Learns a per-pixel convex combination to replace a fixed one.
+
+    Fixed blends such as ``0.65 * a + 0.35 * b`` bake a global prior into the
+    fusion. This module predicts spatially-varying softmax weights from a
+    context tensor (typically the concatenation of the signals being blended
+    plus any evidence maps), so each location chooses its own mixing ratio.
+
+    ``init_bias`` seeds the softmax logits so the starting blend matches the
+    original hand-tuned ratio; e.g. ``init_bias=(0.65, 0.35)`` starts near the
+    legacy weights before the router learns to deviate.
+    """
+
+    def __init__(self, n_inputs, ctx_channels, hidden_channels=None, init_bias=None):
+        super().__init__()
+        self.n_inputs = int(n_inputs)
+        hidden_channels = hidden_channels or max(ctx_channels // 2, 8)
+        self.router = nn.Sequential(
+            nn.Conv2d(ctx_channels, hidden_channels, kernel_size=1, bias=False),
+            nn.GELU(),
+            nn.Conv2d(hidden_channels, self.n_inputs, kernel_size=1),
+        )
+        if init_bias is not None:
+            assert len(init_bias) == self.n_inputs, "init_bias length must equal n_inputs"
+            with torch.no_grad():
+                probs = torch.tensor(init_bias, dtype=torch.float32).clamp_min(1e-6)
+                probs = probs / probs.sum()
+                nn.init.zeros_(self.router[-1].weight)
+                self.router[-1].bias.copy_(torch.log(probs))
+
+    def forward(self, inputs, context):
+        """``inputs``: list of ``n_inputs`` tensors [B, C, H, W] to blend.
+
+        ``context``: [B, ctx_channels, H, W] used to predict the weights.
+        Returns the per-pixel weighted sum of ``inputs``.
+        """
+        weights = torch.softmax(self.router(context), dim=1)
+        out = 0.0
+        for i, feat in enumerate(inputs):
+            out = out + weights[:, i:i + 1] * feat
+        return out
+
+
 def set_encoder_drop_path(encoder, drop_path_rate):
     """Enable stochastic depth on a SegFormer/MiT-style encoder."""
     if drop_path_rate <= 0:

@@ -1,4 +1,11 @@
-from .common import ConvBNAct, ConvGNAct, FixedBoundaryExtractor, set_encoder_drop_path
+from .common import (
+    ConvBNAct,
+    ConvGNAct,
+    FixedBoundaryExtractor,
+    LearnableBlend,
+    LearnableGate,
+    set_encoder_drop_path,
+)
 from .fusion import (
     AngularGuidedGlobalAttention,
     CrossScaleFeatureAligner,
@@ -50,6 +57,8 @@ __all__ = [
     "ConvBNAct",
     "ConvGNAct",
     "FixedBoundaryExtractor",
+    "LearnableBlend",
+    "LearnableGate",
     "set_encoder_drop_path",
     "AngularBoundaryDescriptor",
     "AngularGuidancePyramid",
