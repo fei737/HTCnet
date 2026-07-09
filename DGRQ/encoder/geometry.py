@@ -211,8 +211,66 @@ class RGBGuidedGeometryRecovery(nn.Module):
         return torch.nan_to_num(recovered, nan=0.0, posinf=3.0, neginf=-3.0).clamp(-3.0, 3.0)
 
 
+class CrossModalReliabilityAttention(nn.Module):
+    """Context-aware reliability correction via low-resolution cross-attention.
+
+    The convolutional reliability estimator only sees a 3x3 neighbourhood, but
+    whether depth/HHA can be trusted at a pixel often depends on global context
+    (far surfaces, reflective regions, thin structures, occlusion boundaries).
+
+    This block projects RGB and HHA to a token grid at a controlled low
+    resolution, lets RGB tokens (query) attend to HHA tokens (key/value) with
+    multi-head attention, and predicts a single-channel reliability correction
+    that is added (in logit space) to the conv estimate. The output projection
+    is zero-initialised and scaled by a learnable ``gamma`` so training starts
+    exactly at the conv-only reliability and the attention gain is learned.
+    """
+
+    def __init__(self, in_channels=3, embed_dim=48, num_heads=4, token_hw=(30, 40)):
+        super().__init__()
+        self.token_hw = token_hw
+        self.num_heads = num_heads
+        self.scale = (embed_dim // num_heads) ** -0.5
+        self.rgb_proj = ConvBNAct(in_channels, embed_dim, kernel_size=3, activation=nn.GELU)
+        self.hha_proj = ConvBNAct(in_channels, embed_dim, kernel_size=3, activation=nn.GELU)
+        self.norm_q = nn.LayerNorm(embed_dim)
+        self.norm_kv = nn.LayerNorm(embed_dim)
+        self.to_q = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.to_k = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.to_v = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.proj = nn.Linear(embed_dim, embed_dim)
+        self.head = nn.Conv2d(embed_dim, 1, kernel_size=1)
+        # Zero-init the head so the correction starts at 0 (identity), but keep
+        # gamma=1 so the head still receives gradient from step 1. Initialising
+        # both to zero would deadlock the branch (neither could ever learn).
+        self.gamma = nn.Parameter(torch.ones(1))
+        nn.init.zeros_(self.head.weight)
+        nn.init.zeros_(self.head.bias)
+
+    def forward(self, rgb, hha, reliability):
+        th, tw = self.token_hw
+        rgb_t = F.interpolate(self.rgb_proj(rgb), size=(th, tw), mode="bilinear", align_corners=False)
+        hha_t = F.interpolate(self.hha_proj(hha), size=(th, tw), mode="bilinear", align_corners=False)
+        b, c, h, w = rgb_t.shape
+        n = h * w
+        q_in = self.norm_q(rgb_t.flatten(2).transpose(1, 2))
+        kv_in = self.norm_kv(hha_t.flatten(2).transpose(1, 2))
+        q = self.to_q(q_in).reshape(b, n, self.num_heads, c // self.num_heads).transpose(1, 2)
+        k = self.to_k(kv_in).reshape(b, n, self.num_heads, c // self.num_heads).transpose(1, 2)
+        v = self.to_v(kv_in).reshape(b, n, self.num_heads, c // self.num_heads).transpose(1, 2)
+        attn = torch.softmax((q @ k.transpose(-2, -1)) * self.scale, dim=-1)
+        out = (attn @ v).transpose(1, 2).reshape(b, n, c)
+        out = self.proj(out).transpose(1, 2).reshape(b, c, h, w)
+        correction = self.head(out)
+        correction = F.interpolate(correction, size=reliability.shape[2:], mode="bilinear", align_corners=False)
+        # Additive logit-space correction; identity at init (gamma=0, head=0).
+        rel = reliability.clamp(1e-4, 1.0 - 1e-4)
+        logit = torch.log(rel) - torch.log1p(-rel)
+        return torch.sigmoid(logit + self.gamma * correction)
+
+
 class CrossModalReliabilityEstimator(nn.Module):
-    def __init__(self, hidden_channels=24):
+    def __init__(self, hidden_channels=24, use_reliability_attention=True):
         super().__init__()
         self.edge = FixedSobelEdge()
         self.router = nn.Sequential(
@@ -227,6 +285,9 @@ class CrossModalReliabilityEstimator(nn.Module):
         self.consistency_blend = LearnableBlend(2, ctx_channels=3, init_bias=(0.5, 0.5))
         self.reliability_blend = LearnableBlend(2, ctx_channels=5, init_bias=(0.65, 0.35))
         self.reliability_floor = LearnableGate(init_lo=0.05, init_span=0.95)
+        self.reliability_attention = (
+            CrossModalReliabilityAttention(in_channels=3) if use_reliability_attention else None
+        )
 
     def forward(self, rgb, hha, angle_grad, confidence):
         if rgb.shape[2:] != hha.shape[2:]:
@@ -250,7 +311,10 @@ class CrossModalReliabilityEstimator(nn.Module):
             [confidence, consistency],
             torch.cat([confidence, consistency, edge_gap, rgb_edge, hha_edge], dim=1),
         )
-        return self.reliability_floor(reliability.clamp(0.0, 1.0)).clamp(0.0, 1.0)
+        reliability = self.reliability_floor(reliability.clamp(0.0, 1.0)).clamp(0.0, 1.0)
+        if self.reliability_attention is not None:
+            reliability = self.reliability_attention(rgb, hha, reliability)
+        return reliability.clamp(0.0, 1.0)
 
 
 class StructuralPromptFilter(nn.Module):
