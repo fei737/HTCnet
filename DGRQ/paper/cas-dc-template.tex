@@ -1,0 +1,454 @@
+%% 
+%% Copyright 2019-2024 Elsevier Ltd
+%% 
+%% This file is part of the 'CAS Bundle'.
+%% --------------------------------------
+%% 
+%% It may be distributed under the conditions of the LaTeX Project Public
+%% License, either version 1.3c of this license or (at your option) any
+%% later version.  The latest version of this license is in
+%%    http://www.latex-project.org/lppl.txt
+%% and version 1.3c or later is part of all distributions of LaTeX
+%% version 1999/12/01 or later.
+%% 
+%% The list of all files belonging to the 'CAS Bundle' is
+%% given in the file `manifest.txt'.
+%% 
+%% Template article for cas-dc documentclass for 
+%% double column output.
+
+\documentclass[a4paper,fleqn]{cas-dc}
+
+% If the frontmatter runs over more than one page
+% use the longmktitle option.
+
+%\documentclass[a4paper,fleqn,longmktitle]{cas-dc}
+
+%\usepackage[numbers]{natbib}
+%\usepackage[authoryear]{natbib}
+\usepackage[authoryear,longnamesfirst]{natbib}
+\usepackage{amsmath,amssymb}
+
+%%%Author macros
+\def\tsc#1{\csdef{#1}{\textsc{\lowercase{#1}}\xspace}}
+\tsc{WGM}
+\tsc{QE}
+%%%
+
+% Uncomment and use as if needed
+%\newtheorem{theorem}{Theorem}
+%\newtheorem{lemma}[theorem]{Lemma}
+%\newdefinition{rmk}{Remark}
+%\newproof{pf}{Proof}
+%\newproof{pot}{Proof of Theorem \ref{thm}}
+
+\begin{document}
+\let\WriteBookmarks\relax
+\def\floatpagepagefraction{1}
+\def\textpagefraction{.001}
+
+% Short title
+\shorttitle{Reliable Geometry Prompting for RGB-D Segmentation}    
+
+% Short author
+\shortauthors{Author et~al.}  
+
+% Main title of the paper
+\title [mode = title]{UGF-Lite: Reliable Geometry Prompting for Robust RGB-D Semantic Segmentation}  
+
+% Title footnote mark
+% eg: \tnotemark[1]
+\tnotemark[1] 
+
+% Title footnote 1.
+% eg: \tnotetext[1]{Title footnote text}
+\tnotetext[1]{This manuscript is prepared using the official Elsevier CAS double-column template.} 
+
+% First author
+%
+% Options: Use if required
+% eg: \author[1,3]{Author Name}[type=editor,
+%       style=chinese,
+%       auid=000,
+%       bioid=1,
+%       prefix=Sir,
+%       orcid=0000-0000-0000-0000,
+%       facebook=<facebook id>,
+%       twitter=<twitter id>,
+%       linkedin=<linkedin id>,
+%       gplus=<gplus id>]
+
+\author[1]{Author Name}%[<options>]
+
+% Corresponding author indication
+\cormark[1]
+
+% Email id of the first author
+\ead{author@email.com}
+
+% URL of the first author
+%\ead[url]{}
+
+% Credit authorship
+% eg: \credit{Conceptualization of this study, Methodology, Software}
+\credit{Conceptualization, Methodology, Software, Validation, Writing - original draft}
+
+% Address/affiliation
+\affiliation[1]{organization={Affiliation Name},
+            addressline={Address}, 
+            city={City},
+%          citysep={}, % Uncomment if no comma needed between city and postcode
+            postcode={Postcode}, 
+            state={State},
+            country={Country}}
+
+\author[2]{Coauthor Name}%[]
+
+% Email id of the second author
+\ead{coauthor@email.com}
+
+% URL of the second author
+%\ead[url]{}
+
+% Credit authorship
+\credit{Investigation, Formal analysis, Writing - review and editing}
+
+% Address/affiliation
+\affiliation[2]{organization={Affiliation Name},
+            addressline={Address}, 
+            city={City},
+%          citysep={}, % Uncomment if no comma needed between city and postcode
+            postcode={Postcode}, 
+            state={State},
+            country={Country}}
+
+% Corresponding author text
+\cortext[1]{Corresponding author}
+
+% Footnote text
+%\fntext[1]{}
+
+% For a title note without a number/mark
+%\nonumnote{}
+
+% Here goes the abstract
+\begin{abstract}
+RGB-D semantic segmentation benefits from the complementarity between appearance and geometry, yet depth-derived representations are often unreliable in practical indoor scenes. Missing measurements, noisy contours, reflective surfaces, and RGB-D misalignment can convert geometric evidence into negative transfer. This paper presents UGF-Lite, a lightweight RGB-D segmentation framework based on reliable geometry prompting. HHA is not treated as an RGB-like three-channel image. Instead, disparity-height cues are used to describe layout and support, while the angle-with-gravity cue is used to describe directional boundaries. A learned reliability proxy regulates RGB-guided geometry recovery, geometry prompt generation, and residual RGB modulation. To preserve fine structures without adding a second semantic backbone, the geometry pathway further combines directional edge refinement with autocorrelation prompt mixing. RGB remains the only primary semantic stream, and a fixed lightweight decoder is adopted to keep the analysis focused on encoder-side geometry conditioning. The experimental protocol is organized around clean accuracy, degraded-depth robustness, complexity, and reliability visualization on SUN RGB-D and NYUDv2.
+\end{abstract}
+
+% Use if graphical abstract is present
+%\begin{graphicalabstract}
+%\includegraphics{}
+%\end{graphicalabstract}
+
+% Research highlights
+\begin{highlights}
+\item HHA is decomposed into disparity-height layout cues and angle boundary cues.
+\item A learned reliability proxy regulates geometry recovery and prompt injection.
+\item Geometry prompt generation separates low-frequency layout from high-frequency boundaries.
+\item Directional edge refinement and autocorrelation mixing refine geometry prompts.
+\item Residual RGB modulation uses geometry without forming a second semantic stream.
+\end{highlights}
+
+
+%\nocite{*}
+
+% Keywords
+% Each keyword is seperated by \sep
+\begin{keywords}
+RGB-D semantic segmentation \sep HHA geometry \sep Reliability estimation \sep Geometry prompting \sep Frequency-aware fusion
+\end{keywords}
+
+\maketitle
+
+% Main text
+\section{Introduction}\label{sec:introduction}
+
+Dense semantic segmentation is a fundamental problem in pattern recognition and scene understanding. In indoor environments, RGB images provide rich appearance and texture, while depth observations provide geometric evidence about scene layout, object support, surface discontinuity, and spatial ordering. RGB-D semantic segmentation is therefore important for robotic perception, embodied intelligence, augmented reality, and human-scene interaction.
+
+The central difficulty is that depth is complementary but not consistently trustworthy. Commercial RGB-D sensors often produce holes, quantization artifacts, unstable contours, and erroneous measurements on reflective or transparent surfaces. RGB and depth may also be locally misaligned after calibration, resolution conversion, or synchronization. When such geometry is fused as an equally reliable semantic stream, corrupted depth responses can be propagated into RGB features and cause negative transfer. Robust RGB-D segmentation therefore requires not only stronger cross-modal interaction, but also a mechanism for deciding which geometric evidence should affect the semantic representation.
+
+This problem is especially visible for HHA geometry. HHA encodes horizontal disparity, height above ground, and angle with gravity \citep{gupta2014hha}. These three channels have different physical meanings and different noise patterns: disparity and height mainly describe layout and spatial support, whereas the angle channel is more sensitive to surface orientation, boundaries, and normal-estimation errors. Most fusion pipelines process HHA as an ordinary three-channel image or as a full second stream. This ignores the fact that layout-related channels and angular cues should be modeled differently before they are allowed to influence RGB semantics.
+
+Existing RGB-D segmentation methods usually pursue stronger interaction through early concatenation, symmetric dual encoders, residual feature exchange, attention-based fusion, or larger decoders \citep{hazirbas2016fusenet,long2015fcn}. These strategies increase representation capacity, but they leave three failure modes under-addressed. First, HHA channels with different physical semantics are entangled too early. Second, unreliable depth regions caused by holes, misalignment, or reflective surfaces are not explicitly down-weighted. Third, layout and boundary structures are handled at the same scale, even though segmentation needs low-frequency room-level context and high-frequency local discontinuities. A heavy decoder can further obscure whether a performance gain comes from meaningful RGB-D fusion or simply from decoder capacity.
+
+Motivated by these observations, UGF-Lite is developed as a reliable geometry prompting framework. The design follows a problem-driven chain: HHA decoupling separates disparity-height layout cues from angle boundary cues; geometry reliability estimation suppresses unreliable geometry and bounds RGB-guided recovery; geometry prompt generation separates layout context from boundary structure; and the resulting dense structural prompts modulate RGB features through residual RGB modulation. In this paper, a geometry prompt refers to a dense structural conditioning feature generated from reliability-calibrated HHA cues. It guides RGB semantic features without acting as an independent semantic prediction stream.
+
+The term reliability is used deliberately. UGF-Lite does not assume access to ground-truth uncertainty labels, Bayesian posterior estimates, or calibrated sensor noise. Its reliability map is a learned geometry reliability proxy inferred from HHA statistics, invalid-region hints, and RGB-geometry structural agreement. The proxy is trained indirectly by segmentation and boundary supervision, and its usefulness should be verified through degraded-depth robustness and reliability visualization. This distinction avoids overclaiming uncertainty modeling while retaining the practical goal: geometry should contribute according to how dependable it appears for dense prediction.
+
+UGF-Lite is also designed to justify the ``Lite'' label. RGB is the single primary semantic encoder; HHA is not assigned a symmetric semantic backbone. The geometry pathway produces prompts rather than full semantic logits. The decoder is fixed to a lightweight MLP-style design, and heavier routing or query-driven decoder variants are treated as diagnostics rather than core components. This controlled design makes it easier to attribute improvements to encoder-side geometry prompting.
+
+The main contributions are summarized as follows:
+\begin{enumerate}
+\item HHA decoupling for RGB-D semantic segmentation. Disparity-height channels are modeled as layout-related structural cues, while the angle channel is modeled as a directional boundary cue.
+\item Geometry reliability estimation for reliable prompt injection. A learned reliability proxy regulates RGB-guided recovery and prompt injection, reducing negative transfer from depth holes, boundary noise, and RGB-D misalignment.
+\item Geometry prompt generation with boundary refinement. Low-frequency geometry provides layout context, high-frequency residuals preserve boundaries, and directional edge refinement improves local geometric prompts.
+\item A controlled lightweight segmentation framework. RGB remains the primary semantic stream, HHA provides structural prompts, and a fixed MLP-style decoder is used to separate encoder-side fusion gains from decoder capacity.
+\end{enumerate}
+
+The rest of this paper is organized as follows. Section~\ref{sec:related} reviews RGB-D segmentation, HHA geometry, and reliability-aware fusion. Section~\ref{sec:method} presents the proposed UGF-Lite framework. Section~\ref{sec:experiments} describes the experimental protocol and quantitative comparisons. Section~\ref{sec:discussion} discusses mechanisms and limitations. Section~\ref{sec:conclusion} concludes the paper.
+
+\section{Related Work}\label{sec:related}
+
+\subsection{RGB-D Fusion: From Interaction Strength to Reliability}
+
+RGB-D semantic segmentation assigns dense semantic labels from color and depth observations. Early fusion methods concatenate RGB and depth channels or merge predictions near the output layer. Such designs are simple, but they provide limited control over modality-specific statistics. Later two-stream methods extract RGB and depth features separately and fuse them by summation, concatenation, residual exchange, or attention \citep{hazirbas2016fusenet,long2015fcn}. These methods improve interaction strength, yet they often assume that depth features are broadly useful wherever they are available.
+
+The reliability problem is different from the interaction problem. A model may have strong cross-modal attention and still attend to corrupted depth around holes, reflective regions, or misaligned boundaries. Likewise, a heavy decoder may compensate for poor fusion and make it difficult to identify whether geometry itself helped. UGF-Lite therefore places reliability estimation before geometry injection and keeps the decoder fixed and lightweight. The intended comparison is not only whether RGB-D interaction is strong, but whether it remains useful when geometry is partially unreliable.
+
+\subsection{HHA Geometry and Channel Heterogeneity}
+
+Depth can be represented as raw distance, three-dimensional coordinates, surface normals, or HHA. HHA encodes horizontal disparity, height above ground, and angle with gravity \citep{gupta2014hha}. These channels are physically meaningful, but they are not interchangeable. Horizontal disparity and height above ground are closely related to scene layout, object support, and coarse spatial ordering. The angle channel is related to surface orientation and is often more sensitive to normal estimation, boundary discontinuities, and missing depth.
+
+Many RGB-D pipelines feed HHA into a convolutional or transformer encoder as if it were a normal RGB-like image. This can entangle layout cues and angular boundary cues before their different noise patterns are considered. UGF-Lite instead separates the disparity-height channels from the angle channel throughout the geometry pathway, avoiding ambiguous shorthand for the HHA channels.
+
+\subsection{Reliability-Aware Geometry Prompting}
+
+Uncertainty-aware or reliability-aware fusion methods try to prevent unreliable modalities from dominating dense prediction. For RGB-D segmentation, reliability is spatially varying: planar support regions may contain stable geometry, while object contours, transparent objects, and sensor holes may be unreliable. Global modality weights are therefore too coarse for dense segmentation. Pixel-wise or region-wise reliability is a more appropriate mechanism.
+
+UGF-Lite follows this principle but uses the term reliability rather than strong uncertainty modeling. Its reliability map is a learned proxy, not a calibrated physical uncertainty estimate. It is obtained from HHA statistics, invalid hints, and optional RGB-geometry structural agreement, then optimized through downstream segmentation and boundary losses. This reliability proxy generates a dense geometry prompt: a structural conditioning feature that modulates RGB features without directly predicting semantic classes. Thus, the prompt is closer to residual feature conditioning than to a second semantic stream or a text prompt.
+
+\subsection{Frequency-Aware Structure Modeling}
+
+Semantic segmentation depends on both low-frequency and high-frequency structure. Low-frequency geometry describes room layout, planar support, and contextual scale. High-frequency geometry describes object boundaries, local discontinuities, and thin structures. Treating all geometric responses at one scale may blur these roles. UGF-Lite separates low-frequency disparity-height cues from high-frequency disparity-height residuals and angular gradients, then mixes them in a stage-dependent manner. Shallow stages preserve more boundary evidence, whereas deeper stages receive stronger layout context. This makes frequency modeling a mechanism for RGB-D geometry prompting rather than an isolated image-processing module.
+
+\section{Method}\label{sec:method}
+
+\subsection{Overview and Definitions}
+
+Given an RGB image $\mathbf{I}_{r}\in\mathbb{R}^{3\times H\times W}$ and an HHA image $\mathbf{I}_{g}\in\mathbb{R}^{3\times H\times W}$, the goal is to predict a semantic map $\hat{\mathbf{Y}}\in\mathbb{R}^{C\times H\times W}$. UGF-Lite decomposes HHA as
+\begin{equation}
+  \mathbf{I}_{dh}=[\mathbf{I}_{\mathrm{disp}},\mathbf{I}_{\mathrm{height}}],
+  \quad
+  \mathbf{I}_{a}=\mathbf{I}_{\mathrm{angle}},
+\end{equation}
+where $\mathbf{I}_{dh}$ contains layout-related disparity-height cues and $\mathbf{I}_{a}$ contains the angle-with-gravity cue.
+
+The network is asymmetric. RGB is processed by a pretrained backbone to obtain multi-scale semantic features $\{\mathbf{F}_{r}^{s}\}_{s=1}^{S}$. HHA is processed by a lightweight geometry pathway that estimates a reliability proxy $\mathbf{q}$, constructs stage-wise geometry prompts $\{\mathbf{P}_{g}^{s}\}_{s=1}^{S}$, and builds angular side guides $\{\mathbf{A}^{s}\}_{s=1}^{S}$. A geometry prompt is defined as a dense structural conditioning feature generated from reliability-calibrated HHA cues. It modulates RGB features but does not independently predict semantic classes. The final prediction is produced by a fixed lightweight decoder from the reliability-guided RGB features.
+
+% Figure
+\begin{figure}%[]
+  \centering
+  \fbox{\begin{minipage}[c][0.23\textheight][c]{0.90\linewidth}
+  \centering
+  \textbf{Architecture placeholder.}
+
+  RGB $\rightarrow$ primary semantic encoder $\rightarrow$ multi-scale RGB features.
+
+  HHA $\rightarrow$ learned reliability proxy + bounded recovery $\rightarrow$ disparity-height branch + angle branch.
+
+  Reliability-calibrated low/high-frequency prompts $\rightarrow$ residual RGB modulation $\rightarrow$ fixed lightweight decoder.
+  \end{minipage}}
+    \caption{Overview of UGF-Lite. HHA is decomposed into disparity-height layout cues and angle boundary cues. Reliable geometry is converted into dense prompts that modulate RGB features without forming a second semantic stream.}\label{fig:overview}
+\end{figure}
+
+\subsection{Geometry Reliability Estimation}
+
+The initial reliability proxy is estimated from HHA statistics. A local noise descriptor is computed from channel-averaged variation in a $3\times3$ window, and an invalid hint is obtained from near-zero HHA magnitude. These cues are processed by a shallow convolutional estimator whose output is shifted to a conservative range. The lower bound prevents geometry from being fully removed early in training, while still attenuating low-confidence responses. When RGB-geometry consistency routing is enabled, RGB and HHA edge maps are compared and the proxy is blended with a structural agreement score. This route is treated as a diagnostic option rather than a required component of the Lite setting.
+
+\subsection{RGB-Guided Geometry Recovery}
+
+Depth holes and noisy boundaries often coincide with visible RGB structures. UGF-Lite therefore performs limited recovery only where the geometry proxy is low. A normalized RGB Sobel edge map and a shallow RGB context feature are concatenated with HHA, reliability, noise, and invalid hints to predict a residual correction. The residual is passed through a bounded activation, weighted by the unreliable-region gate and RGB edge response, and clipped to a fixed valid range. This conservative design preserves reliable geometry and restricts recovery to local correction instead of unrestricted depth reconstruction.
+
+After recovery, the reliability estimator is applied again to $\tilde{\mathbf{I}}_{g}$ so that prompt construction uses the updated geometry reliability proxy.
+
+\subsection{HHA Decoupling}
+
+\subsubsection{Disparity-Height Branch}
+
+The recovered HHA is decomposed as $\tilde{\mathbf{I}}_{dh}=[\tilde{\mathbf{I}}_{\mathrm{disp}},\tilde{\mathbf{I}}_{\mathrm{height}}]$ and $\tilde{\mathbf{I}}_{a}=\tilde{\mathbf{I}}_{\mathrm{angle}}$. The disparity-height branch models the first two channels as layout-related geometry. In implementation, it applies reliability gating, a fixed Laplacian structural contrast response, a shallow Conv-GN-GELU gate, and a bounded residual to emphasize stable discontinuities. This branch provides the main input for low-frequency layout and high-frequency boundary prompt construction.
+
+\subsubsection{Angle Branch}
+
+The angle channel is processed separately because it encodes surface orientation rather than layout magnitude. The implementation smooths $\tilde{\mathbf{I}}_{a}$, applies four fixed oriented Sobel filters, gates the directional responses, and refines them by a small convolutional block. The angular map is multiplied by the reliability proxy and projected into a multi-scale angular guidance pyramid $\{\mathbf{A}^{s}\}_{s=1}^{S}$. This branch mainly supports boundary-sensitive local alignment and geometry-aware semantic aggregation.
+
+\subsection{Geometry Prompt Generation}
+
+The recovered disparity-height feature is separated into low-frequency and high-frequency components by a fixed average-pooling split. The low-frequency component is used to form a layout prompt, while the high-frequency residual is combined with angular guidance and reliability to form a boundary prompt. Stage-wise routing controls the balance between layout and boundary evidence: shallow stages receive stronger boundary information, whereas deeper stages receive stronger layout context. Each prompt is then resized, projected to the corresponding RGB feature dimension, and multiplied by a learnable scale initialized to a small value.
+
+Two lightweight refinements are used to improve prompt quality without changing the primary RGB semantic stream. First, \emph{Directional Edge Refinement} applies horizontal and vertical depthwise filters to the boundary prompt and selects their contribution using angular-gradient and reliability gates. Its output projection is zero-initialized, so the module starts from an identity mapping and can be disabled for ablation. Second, \emph{Autocorrelation Prompt Mixing} applies patch-level autocorrelation to projected prompts in a numerically safe residual branch. The branch is also zero-initialized and gated by geometry reliability, which keeps early training stable while allowing repeated structural patterns to be reinforced when the geometry is dependable.
+
+\subsection{Residual RGB Modulation}
+
+At each RGB encoder stage, the prompt $\mathbf{P}_{g}^{s}$ and angular guide $\mathbf{A}^{s}$ are projected to the RGB feature dimension. A stage reliability gate is predicted from RGB, prompt, and angular features, optionally blended with the resized image-level reliability proxy, and then used to attenuate unreliable prompt and angular responses.
+
+\subsubsection{Local Alignment Branch}
+
+The local branch handles RGB-D spatial discrepancy and boundary-level structure. It predicts a small two-channel offset field from the calibrated prompt and angular guide, aligns RGB features by differentiable grid sampling, and applies bounded scale-shift modulation. The implementation further decomposes the modulated RGB feature into components parallel and orthogonal to the normalized prompt. The parallel part forms common structure with the prompt, while the orthogonal part is filtered as RGB texture. A $1\times1$-$3\times3$-$1\times1$ convolutional block produces the local residual $\Delta\mathbf{F}_{\mathrm{loc}}^{s}$.
+
+\subsubsection{Context Aggregation Branch}
+
+The context branch captures longer-range context under geometry guidance. To bound memory, feature maps are adaptively resized if the token number exceeds a fixed budget. Attention is computed over RGB features conditioned by the prompt, while the angular guide discourages aggregation across structurally distant positions. The output is resized back to the original stage resolution and fused with the angular guide by a small post-projection block. Deeper geometry-guided attention variants are kept as diagnostic options and are not required by the Lite decoder setting.
+
+\subsubsection{Branch Routing}
+
+The final stage feature is produced by adding routed local and context residuals to the RGB feature. The routing weights are predicted from pooled RGB, prompt, angular, reliability, and scale-context features. In branch ablations, the route is fixed to local-only, context-only, or RGB-only. The residual design preserves RGB semantic dominance and makes geometry an auxiliary conditioning signal rather than a replacement for RGB features.
+
+\subsection{Lightweight Decoder}
+
+To avoid attributing improvements to a heavy decoder, UGF-Lite uses a fixed MLP-style decoder. Each fused feature is projected to a shared width by a $1\times1$ Conv-BN-activation block, resized to the highest feature resolution, concatenated, and classified. The decoder contains one main classifier, one auxiliary classifier, and one lightweight edge head. The final semantic logits are upsampled to the input resolution. This design follows the simple decoder principle used in efficient transformer segmentation \citep{xie2021segformer} and keeps the paper focused on encoder-side geometry prompting.
+
+\subsection{Training Objective}
+
+The main objective is kept compact:
+\begin{equation}
+  \mathcal{L}_{\mathrm{main}}
+  =
+  \mathcal{L}_{\mathrm{ce}}
+  +\lambda_{\mathrm{lov}}\mathcal{L}_{\mathrm{lovasz}}
+  +\lambda_{\mathrm{edge}}\mathcal{L}_{\mathrm{edge}}.
+\end{equation}
+Here $\mathcal{L}_{\mathrm{ce}}$ is cross-entropy with online hard example mining after warm-up, $\mathcal{L}_{\mathrm{lovasz}}$ improves region overlap, and $\mathcal{L}_{\mathrm{edge}}$ supervises the lightweight edge head using boundaries derived from the segmentation mask. No manual uncertainty or reliability label is used. The codebase also supports Dice loss, boundary-weighted cross-entropy, feature-precision loss, and auxiliary supervision; these terms are implementation options and should be held fixed or reported in diagnostic ablations so that the main contribution is not confused with loss engineering.
+
+\section{Experiments}\label{sec:experiments}
+
+\subsection{Datasets and Metrics}
+
+Experiments use SUN RGB-D and NYUDv2. SUN RGB-D contains 10,335 RGB-D images and is commonly evaluated on 40 semantic classes after ignoring the void label \citep{song2015sun}. NYUDv2 contains 1,449 RGB-D images with dense semantic annotations \citep{silberman2012nyud}. Unless otherwise specified, mean Intersection over Union (mIoU) is the primary metric. Pixel accuracy, mean class accuracy, parameter count, FLOPs, and inference speed are reported as supplementary metrics.
+
+\subsection{Implementation Details}
+
+The RGB backbone is instantiated as a MiT-B2 encoder initialized from ImageNet-pretrained weights. RGB and HHA inputs are resized or cropped to $480\times640$ in the main SUN RGB-D experiments. The decoder is fixed as a lightweight MLP fusion decoder with 320 decoder channels. The controlled training protocol uses AdamW, a base learning rate of $8\times10^{-5}$, an encoder learning-rate multiplier of 0.5, 5 warm-up epochs, polynomial decay with a minimum learning-rate ratio of 0.05, stochastic depth of 0.05, mixed precision, exponential moving average, and distributed training with a target global batch size of 16. The prompt width is 48, the context attention budget is 1600 tokens, and both local and context residual scales are initialized to $10^{-3}$. The paper-facing UGF-Lite setting enables Directional Edge Refinement and Autocorrelation Prompt Mixing; both are implemented as zero-initialized residual branches. All ablation variants keep the remaining settings fixed unless the ablated factor explicitly changes them.
+
+\subsection{Main Comparison}
+
+The main comparison includes classical RGB-D segmentation methods, recent transformer-based RGB-D fusion methods, and strong RGB-only baselines. Results reproduced under the controlled protocol and results quoted from papers are separated. Because backbone, pretraining, input resolution, and test-time augmentation may differ across methods, the table explicitly indicates these settings.
+
+\begin{table*}%[]
+\caption{Main comparison on SUN RGB-D and NYUDv2. ``TBD'' denotes result placeholders in the current draft. SS and MS denote single-scale and multi-scale testing, respectively.}\label{tab:main}
+\begin{tabular*}{\tblwidth}{@{\extracolsep{\fill}}llllcc@{}}
+\toprule
+Method & Backbone & Modality & Test & SUN & NYUDv2 \\
+\midrule
+RGB baseline & MiT-B2 & RGB & SS & TBD & TBD \\
+Naive RGB-HHA fusion & MiT-B2 & RGB-D & SS & TBD & TBD \\
+Recent RGB-D method A & Reported & RGB-D & SS/MS & TBD & TBD \\
+Recent RGB-D method B & Reported & RGB-D & SS/MS & TBD & TBD \\
+UGF-Lite & MiT-B2 & RGB-D & SS & TBD & TBD \\
+UGF-Lite & MiT-B2 & RGB-D & MS & TBD & TBD \\
+\bottomrule
+\end{tabular*}
+\end{table*}
+
+\subsection{Controlled Component Ablation}
+
+The main ablation follows the proposed causal chain. All variants use the same RGB backbone, simple decoder, input resolution, training schedule, and evaluation policy. The goal is to verify whether each component addresses its intended failure mode rather than simply adding capacity.
+
+\begin{table*}%[]
+\caption{Controlled UGF-Lite ablation on SUN RGB-D. The table follows the current experiment script: early rows isolate recovered HHA prompting and branch routing, while E5 adds the final prompt-quality refinements.}\label{tab:ablation}
+\begin{tabular*}{\tblwidth}{@{\extracolsep{\fill}}p{\dimexpr\tblwidth*7/100\relax}p{\dimexpr\tblwidth*20/100\relax}p{\dimexpr\tblwidth*43/100\relax}p{\dimexpr\tblwidth*18/100\relax}c@{}}
+\toprule
+ID & Configuration & Purpose & Prompt refinements & mIoU \\
+\midrule
+E0 & RGB only & Backbone and decoder baseline & Off & 0.4857 \\
+E1 & HHA prompt & Geometry prompt without recovery & Off & 0.4942 \\
+E2 & RGB-guided recovery & Recovered geometry prompt & Off & 0.4946 \\
+E3 & Local branch only & Boundary/local alignment contribution & Off & 0.4933 \\
+E4 & Context branch only & Context aggregation contribution & Off & 0.4905 \\
+E5 & Full UGF-Lite & Local and context fusion with final prompt refinement & Edge + autocorr & TBD \\
+\bottomrule
+\end{tabular*}
+\end{table*}
+
+\subsection{Diagnostic Ablation}
+
+Some modules from early prototypes are not main contributions because their gains may be unstable or dominated by complexity. They are evaluated as diagnostics and excluded from the final paper model unless they provide reproducible improvements under the same decoder and training protocol.
+
+\begin{table*}%[]
+\caption{Diagnostic ablation for prototype modules. These results are used to decide whether a module should remain in the final paper model.}\label{tab:diagnostic}
+\begin{tabular*}{\tblwidth}{@{\extracolsep{\fill}}p{\dimexpr\tblwidth*30/100\relax}p{\dimexpr\tblwidth*55/100\relax}c@{}}
+\toprule
+Variant & Purpose & mIoU \\
+\midrule
+RGB-geometry consistency routing & Test cross-modal consistency beyond HHA-only reliability & TBD \\
+SSM layout stream & Test state-space layout modeling beyond convolutional layout aggregation & TBD \\
+Deep geometry attention & Test deep angular attention beyond the Lite fusion block & TBD \\
+No autocorrelation mixing & Isolate Autocorrelation Prompt Mixing & TBD \\
+No directional edge refinement & Isolate Directional Edge Refinement & TBD \\
+Query-driven decoder & Decoder-side upper-bound reference, not a main contribution & TBD \\
+Additional loss terms & Test Dice, boundary CE, feature precision, and auxiliary CE & TBD \\
+\bottomrule
+\end{tabular*}
+\end{table*}
+
+\subsection{Robustness Under Degraded Geometry}
+
+Robustness is evaluated under controlled geometry degradation. The protocol applies Gaussian noise to HHA/depth, random rectangular HHA dropout, and spatial shifting of HHA by fixed offsets. The expected behavior is not merely higher clean mIoU, but a smaller mIoU drop than naive RGB-HHA fusion when geometry becomes unreliable.
+
+\begin{table}%[]
+\caption{Robustness under degraded geometry. Values are mIoU.}\label{tab:robust}
+\begin{tabular*}{\tblwidth}{@{\extracolsep{\fill}}lcccc@{}}
+\toprule
+Method & Clean & Noise & Dropout & Shift \\
+\midrule
+RGB baseline & TBD & TBD & TBD & TBD \\
+Naive RGB-HHA fusion & TBD & TBD & TBD & TBD \\
+UGF-Lite without recovery & TBD & TBD & TBD & TBD \\
+UGF-Lite & TBD & TBD & TBD & TBD \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+\subsection{Complexity Analysis}
+
+Complexity is reported together with accuracy to show whether the proposed fusion improves robustness without relying on excessive decoder capacity. Parameters, FLOPs, and FPS are measured under the same input resolution and hardware setting.
+
+\begin{table}%[]
+\caption{Complexity comparison.}\label{tab:complexity}
+\begin{tabular*}{\tblwidth}{@{\extracolsep{\fill}}lcccc@{}}
+\toprule
+Method & Params & FLOPs & FPS & mIoU \\
+\midrule
+RGB baseline & TBD & TBD & TBD & TBD \\
+Naive RGB-HHA fusion & TBD & TBD & TBD & TBD \\
+UGF-Lite & TBD & TBD & TBD & TBD \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+\subsection{Qualitative Analysis}
+
+Qualitative analysis includes RGB images, HHA maps, ground-truth masks, RGB baseline predictions, naive RGB-D fusion predictions, UGF-Lite predictions, and reliability maps. The analysis emphasizes missing depth, thin structures, cluttered objects, weak RGB contrast, and RGB-D edge conflicts. Failure cases are included to avoid overclaiming the reliability proxy.
+
+\section{Discussion}\label{sec:discussion}
+
+\subsection{Why Channel Decoupling Matters}
+
+HHA is useful because it packages depth into physically meaningful channels, but those channels are not semantically or statistically equivalent. Disparity and height above ground are relatively direct layout cues. They help distinguish support surfaces, furniture scale, and spatial ordering. The angle channel depends on surface orientation and normal estimation; it often responds strongly near boundaries, holes, and planar discontinuities. Early entanglement can make the network treat angular noise as layout evidence or suppress useful boundary evidence as global depth noise. The proposed disparity-height and angle split makes the inductive bias explicit.
+
+\subsection{Why Frequency-Aware Guidance Matters}
+
+Segmentation uses geometry at different spatial frequencies. Low-frequency HHA supports room layout and context, such as wall-floor separation and object support. High-frequency HHA supports object contours, thin structures, and local discontinuities. If all geometry is injected at a single scale, low-frequency layout may blur object boundaries, while high-frequency noise may disturb semantic context. UGF-Lite addresses this by using an average-pooling low/high split and a stage-dependent prompt mixture. Directional Edge Refinement biases the boundary prompt toward horizontal and vertical structural changes, while Autocorrelation Prompt Mixing reinforces repeated local patterns in reliable regions. These two refinements are intentionally residual and zero-initialized, so their contribution can be measured without destabilizing the baseline.
+
+\subsection{When Reliability Can Fail}
+
+The reliability proxy is learned from data, not from calibrated sensor physics. It can fail when RGB and HHA are both unreliable, when RGB edges disagree with true semantic boundaries, or when severe misalignment makes cross-modal structural agreement misleading. Transparent and reflective objects, very small objects, and objects with weak depth contrast remain difficult. The method also depends on HHA preprocessing quality; errors in gravity estimation or normal computation can corrupt the angle channel. These limitations motivate degraded-depth evaluation and reliability visualization as required evidence rather than optional qualitative figures.
+
+\subsection{Scope of the Lite Design}
+
+UGF-Lite should be interpreted as a controlled encoder-side fusion framework, not as a claim that every auxiliary component is necessary. The Lite setting keeps RGB as the only primary semantic stream, uses HHA to generate prompts, fixes the decoder, and separates diagnostic modules from the main model. If a heavier layout aggregator, deeper angular attention, or query-driven decoder improves results, it should be reported as an extension rather than folded into the core contribution without ablation.
+
+\section{Conclusion}\label{sec:conclusion}
+
+This paper presents UGF-Lite, a channel-decoupled and reliability-calibrated geometry prompting framework for robust RGB-D semantic segmentation. The central idea is to treat HHA as auxiliary structural evidence rather than a uniformly trusted semantic stream. By separating disparity-height and angle cues, learning a dense reliability proxy, adapting geometry across low and high frequencies, refining boundary prompts with directional evidence, and injecting prompts through residual RGB modulation under a fixed lightweight decoder, UGF-Lite provides a focused framework for testing robust encoder-side RGB-D fusion.
+
+% To print the credit authorship contribution details
+\printcredits
+
+%% Loading bibliography style file
+%\bibliographystyle{model1-num-names}
+\bibliographystyle{cas-model2-names}
+
+% Loading bibliography database
+\bibliography{cas-refs}
+
+% Biography
+%\bio{}
+% Here goes the biography details.
+%\endbio
+
+%\bio{pic1}
+% Here goes the biography details.
+%\endbio
+
+\end{document}

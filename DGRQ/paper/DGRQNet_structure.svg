@@ -1,0 +1,232 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1260" viewBox="0 0 1900 1260">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#334155"/>
+    </marker>
+    <style>
+      .title { font-family: Arial, sans-serif; font-size: 32px; font-weight: 700; fill: #111827; }
+      .subtitle { font-family: Arial, sans-serif; font-size: 16px; fill: #475569; }
+      .box { stroke-width: 2; rx: 8; ry: 8; }
+      .label { font-family: Arial, sans-serif; font-size: 16px; font-weight: 700; fill: #0f172a; }
+      .small { font-family: Arial, sans-serif; font-size: 13px; fill: #334155; }
+      .tiny { font-family: Arial, sans-serif; font-size: 11px; fill: #475569; }
+      .arrow { stroke: #334155; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #64748b; stroke-width: 1.8; stroke-dasharray: 7 6; fill: none; marker-end: url(#arrow); }
+      .group { fill: none; stroke: #94a3b8; stroke-width: 2; stroke-dasharray: 8 8; rx: 16; ry: 16; }
+      .rgb { fill: #dbeafe; stroke: #2563eb; }
+      .geo { fill: #dcfce7; stroke: #16a34a; }
+      .prompt { fill: #fef3c7; stroke: #d97706; }
+      .fusion { fill: #ede9fe; stroke: #7c3aed; }
+      .decoder { fill: #ffe4e6; stroke: #e11d48; }
+      .output { fill: #e0f2fe; stroke: #0284c7; }
+      .note { fill: #f8fafc; stroke: #64748b; }
+    </style>
+  </defs>
+
+  <rect width="1900" height="1260" fill="#ffffff"/>
+  <text x="60" y="55" class="title">DGRQ-Net Current Code Structure</text>
+  <text x="60" y="84" class="subtitle">Code-faithful diagram for SUNpy_manba/models.py: RGB semantic encoder plus HHA reliability-aware geometric prompting</text>
+
+  <rect x="40" y="120" width="330" height="1000" class="group"/>
+  <text x="62" y="150" class="label">Inputs and HHA Reliability</text>
+
+  <rect x="78" y="190" width="245" height="62" class="box rgb"/>
+  <text x="104" y="216" class="label">RGB image</text>
+  <text x="104" y="238" class="small">(B, 3, H, W)</text>
+
+  <rect x="78" y="330" width="245" height="62" class="box geo"/>
+  <text x="104" y="356" class="label">HHA image</text>
+  <text x="104" y="378" class="small">geometry input, not a deep encoder</text>
+
+  <rect x="78" y="430" width="245" height="70" class="box geo"/>
+  <text x="104" y="456" class="label">MUEB</text>
+  <text x="104" y="478" class="small">HHA + variance + invalid hint</text>
+
+  <rect x="78" y="530" width="245" height="76" class="box geo"/>
+  <text x="104" y="558" class="label">GPRB (optional)</text>
+  <text x="104" y="580" class="small">bounded HHA residual recovery</text>
+  <text x="104" y="596" class="tiny">enabled unless --no-prompt-recovery</text>
+
+  <rect x="78" y="636" width="245" height="70" class="box geo"/>
+  <text x="104" y="662" class="label">MUEB again</text>
+  <text x="104" y="684" class="small">refresh hha_confidence</text>
+
+  <rect x="78" y="742" width="245" height="70" class="box geo"/>
+  <text x="104" y="768" class="label">BSDE</text>
+  <text x="104" y="790" class="small">HD channels + fixed Laplacian</text>
+
+  <rect x="78" y="842" width="245" height="70" class="box geo"/>
+  <text x="104" y="868" class="label">AGFD</text>
+  <text x="104" y="890" class="small">fixed angular kernels</text>
+
+  <rect x="78" y="942" width="245" height="70" class="box prompt"/>
+  <text x="104" y="968" class="label">MAGP</text>
+  <text x="104" y="990" class="small">multi-scale angular side guides</text>
+
+  <rect x="420" y="120" width="360" height="1000" class="group"/>
+  <text x="442" y="150" class="label">RGB Encoder and FD-GPF</text>
+
+  <rect x="465" y="190" width="270" height="82" class="box rgb"/>
+  <text x="494" y="220" class="label">rgb_encoder</text>
+  <text x="494" y="243" class="small">SMP encoder, run.sh default mit_b2</text>
+  <text x="494" y="260" class="tiny">only deep semantic encoder</text>
+
+  <rect x="465" y="330" width="270" height="72" class="box rgb"/>
+  <text x="494" y="358" class="label">valid RGB scales</text>
+  <text x="494" y="380" class="small">encoder stages with ch &gt; 0 and i &gt; 0</text>
+
+  <rect x="465" y="470" width="270" height="242" class="box prompt"/>
+  <text x="494" y="500" class="label">FD-GPF</text>
+  <text x="494" y="523" class="small">FrequencyDisentangledGeometricPromptField</text>
+  <line x1="488" y1="542" x2="712" y2="542" stroke="#d97706" stroke-width="1"/>
+  <text x="494" y="568" class="small">layout stream:</text>
+  <text x="514" y="589" class="tiny">AvgPool9x9(HD) + confidence</text>
+  <text x="514" y="608" class="tiny">layout_mode: ssm | conv | avgpool</text>
+  <text x="494" y="634" class="small">boundary stream:</text>
+  <text x="514" y="655" class="tiny">HD_high + angle_grad + confidence</text>
+  <text x="494" y="682" class="small">scale router:</text>
+  <text x="514" y="703" class="tiny">more boundary shallow, more layout deep</text>
+
+  <rect x="485" y="750" width="230" height="92" class="box prompt"/>
+  <text x="512" y="779" class="label">GSL-Scan</text>
+  <text x="512" y="803" class="small">GeometryStateSpaceScan</text>
+  <text x="512" y="824" class="tiny">4 directions, scan grid capped at 32</text>
+
+  <rect x="465" y="880" width="270" height="82" class="box prompt"/>
+  <text x="494" y="909" class="label">prompt features</text>
+  <text x="494" y="932" class="small">projected to each encoder scale</text>
+  <text x="494" y="949" class="tiny">prompt_scale initialized to 0.1</text>
+
+  <rect x="465" y="1000" width="270" height="72" class="box prompt"/>
+  <text x="494" y="1028" class="label">GSTF on first 2 scales</text>
+  <text x="494" y="1050" class="small">structural texture filter</text>
+
+  <rect x="835" y="120" width="390" height="1000" class="group"/>
+  <text x="857" y="150" class="label">Dynamic Routing and Cross-Scale Fusion</text>
+
+  <rect x="882" y="250" width="295" height="316" class="box fusion"/>
+  <text x="913" y="280" class="label">DGLSR-M per scale</text>
+  <text x="913" y="303" class="small">DynamicGatedLocalSemanticRoutingModule</text>
+  <line x1="906" y1="322" x2="1154" y2="322" stroke="#7c3aed" stroke-width="1"/>
+  <text x="913" y="348" class="small">geometry reliability routing:</text>
+  <text x="933" y="369" class="tiny">global HHA confidence gates prompt strength</text>
+  <text x="913" y="397" class="small">local branch:</text>
+  <text x="933" y="418" class="tiny">offset warp + SFT + texture filtering</text>
+  <text x="913" y="446" class="small">semantic branch:</text>
+  <text x="933" y="467" class="tiny">topological attention, optional deep GSA</text>
+  <text x="913" y="495" class="small">route gate:</text>
+  <text x="933" y="516" class="tiny">scale-biased local/semantic residual mix</text>
+  <text x="913" y="545" class="tiny">attention_tokens configurable, V9 default 1600</text>
+
+  <rect x="882" y="630" width="295" height="82" class="box fusion"/>
+  <text x="913" y="660" class="label">SP-ASPP</text>
+  <text x="913" y="683" class="small">deepest fused feature only</text>
+
+  <rect x="882" y="775" width="295" height="95" class="box fusion"/>
+  <text x="913" y="805" class="label">CS-DGAM</text>
+  <text x="913" y="828" class="small">CrossScaleDualGatedAlignment</text>
+  <text x="913" y="849" class="tiny">top-down channel and spatial gates</text>
+
+  <rect x="1280" y="120" width="430" height="1000" class="group"/>
+  <text x="1302" y="150" class="label">Decoder, Boundary Refinement, Outputs</text>
+
+  <rect x="1328" y="205" width="335" height="230" class="box decoder"/>
+  <text x="1360" y="236" class="label">QDHS Decoder</text>
+  <text x="1360" y="259" class="small">QueryDrivenHierarchicalSpatialFusionDecoder</text>
+  <line x1="1352" y1="278" x2="1638" y2="278" stroke="#e11d48" stroke-width="1"/>
+  <text x="1360" y="304" class="tiny">lateral projection + PPM + FPN</text>
+  <text x="1360" y="326" class="tiny">semantic stream + geometry stream</text>
+  <text x="1360" y="348" class="tiny">static class queries + dynamic queries</text>
+  <text x="1360" y="370" class="tiny">sparse multi-scale query attention</text>
+  <text x="1360" y="392" class="tiny">returns seg_base, detail_feat, aux_logits</text>
+  <text x="1360" y="414" class="tiny">decoder_channels configurable, V9 default 320</text>
+
+  <rect x="1328" y="500" width="335" height="116" class="box decoder"/>
+  <text x="1360" y="532" class="label">MSDE-BDN</text>
+  <text x="1360" y="556" class="small">multi-source boundary discrimination</text>
+  <text x="1360" y="578" class="tiny">detail + shallow fused + side guide + seg_base</text>
+  <text x="1360" y="599" class="tiny">outputs edge_feat, detail_logits, boundary_feat</text>
+
+  <rect x="1328" y="670" width="335" height="105" class="box decoder"/>
+  <text x="1360" y="702" class="label">SE-CBRL</text>
+  <text x="1360" y="726" class="small">semantic-edge co-gated refinement</text>
+  <text x="1360" y="748" class="tiny">boundary_feat also receives RGB FixedBoundaryExtractor</text>
+
+  <rect x="1328" y="830" width="150" height="75" class="box output"/>
+  <text x="1360" y="860" class="label">CERRH</text>
+  <text x="1360" y="883" class="small">segmentation</text>
+
+  <rect x="1513" y="830" width="150" height="75" class="box output"/>
+  <text x="1545" y="860" class="label">CERRH</text>
+  <text x="1545" y="883" class="small">edge</text>
+
+  <rect x="1328" y="955" width="150" height="70" class="box output"/>
+  <text x="1355" y="986" class="label">seg_logits</text>
+  <text x="1355" y="1007" class="tiny">main output</text>
+
+  <rect x="1513" y="955" width="150" height="70" class="box output"/>
+  <text x="1540" y="986" class="label">edge_logits</text>
+  <text x="1540" y="1007" class="tiny">edge output</text>
+
+  <rect x="1328" y="1060" width="335" height="50" class="box output"/>
+  <text x="1360" y="1091" class="label">aux_seg_logits when return_aux=True</text>
+
+  <rect x="60" y="1150" width="560" height="74" class="box note"/>
+  <text x="84" y="1178" class="label">Model constructor defaults</text>
+  <text x="84" y="1202" class="small">prompt=32, state=16, decoder=256, attn_tokens=1024, query_points=4</text>
+
+  <rect x="670" y="1150" width="640" height="74" class="box note"/>
+  <text x="694" y="1178" class="label">Current run.sh V9 defaults</text>
+  <text x="694" y="1202" class="small">prompt=48, state=24, decoder=320, attn_tokens=1600, query_points=6</text>
+
+  <rect x="1360" y="1150" width="480" height="74" class="box note"/>
+  <text x="1384" y="1178" class="label">Losses</text>
+  <text x="1384" y="1202" class="small">OHEM CE + Lovasz + Dice + edge BCE + boundary CE + feature precision + aux CE</text>
+
+  <path class="arrow" d="M323 221 L465 221"/>
+  <path class="arrow" d="M600 272 L600 330"/>
+  <path class="arrow" d="M735 366 L882 366"/>
+
+  <path class="arrow" d="M200 392 L200 430"/>
+  <path class="arrow" d="M200 500 L200 530"/>
+  <path class="arrow" d="M200 606 L200 636"/>
+  <path class="arrow" d="M200 706 L200 742"/>
+  <path class="arrow" d="M200 812 L200 842"/>
+  <path class="arrow" d="M200 912 L200 942"/>
+
+  <path class="arrow" d="M323 671 L465 555"/>
+  <path class="arrow" d="M323 777 L465 610"/>
+  <path class="arrow" d="M323 877 L465 653"/>
+  <path class="arrow" d="M323 977 L882 438"/>
+
+  <path class="arrow" d="M600 712 L600 750"/>
+  <path class="arrow" d="M600 842 L600 880"/>
+  <path class="arrow" d="M600 962 L600 1000"/>
+  <path class="arrow" d="M735 1036 L882 452"/>
+
+  <path class="dash" d="M200 671 C420 690, 700 700, 882 348"/>
+  <text x="606" y="694" class="tiny">hha_confidence for reliability routing</text>
+
+  <path class="arrow" d="M1030 566 L1030 630"/>
+  <path class="arrow" d="M1030 712 L1030 775"/>
+  <path class="arrow" d="M1177 822 L1328 320"/>
+
+  <path class="arrow" d="M1495 435 L1495 500"/>
+  <path class="arrow" d="M1495 616 L1495 670"/>
+  <path class="arrow" d="M1438 775 L1403 830"/>
+  <path class="arrow" d="M1554 775 L1588 830"/>
+  <path class="arrow" d="M1403 905 L1403 955"/>
+  <path class="arrow" d="M1588 905 L1588 955"/>
+  <path class="arrow" d="M1495 435 L1495 1060"/>
+
+  <path class="dash" d="M600 366 C480 430, 500 760, 1328 722"/>
+  <text x="1018" y="710" class="tiny">RGB high-frequency guide from shallow encoder feature</text>
+
+  <path class="dash" d="M1403 1025 C1350 1080, 1330 1120, 1360 1150"/>
+  <path class="dash" d="M1588 1025 C1565 1090, 1450 1125, 1480 1150"/>
+  <path class="dash" d="M1495 1110 C1535 1135, 1580 1142, 1600 1150"/>
+
+  <rect x="60" y="1025" width="1165" height="78" fill="#f8fafc" stroke="#cbd5e1" rx="10" ry="10"/>
+  <text x="84" y="1054" class="small">Code-faithful claim: HHA is converted into confidence, recovered geometry, angular guides, frequency-disentangled prompts, and boundary evidence. It is not processed by a second deep semantic encoder.</text>
+  <text x="84" y="1080" class="small">V9 changes are parameter adjustments of existing modules: wider prompt/decoder streams, larger attention/query budgets, and less muted existing residual scales.</text>
+</svg>

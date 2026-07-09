@@ -1,30 +1,83 @@
-cd ~/HTCnet
-cat > .gitignore <<'EOF'
-# Datasets
+# ======================================================================
+# HTCnet .gitignore — 只保留代码与文档源，排除数据/权重/日志/产物
+# ======================================================================
+
+# ---------- 数据集 / 大数据 ----------
 DataSets/
 dataset/
 datasets/
 NYURGB/
 HHA_datasets/
 labels/
+getDATA/Depth2HHA-python/
+**/data/
+*.npy
+*.npz
+*.mat
+*.h5
+*.hdf5
 
-# Training artifacts / checkpoints
+# ---------- 训练输出 / 实验结果 ----------
+runs/
+runs_ugf_lite/
+ablation_runs/
+ablation_runs_mitb2_clean/
 Checkpoint/
+Checkpoint_DGRQ_simple_mlp/
 checkpoints/
+results/
+result_*.png
+logs/
+**/logs/
+*.log
+
+# ---------- 模型权重 ----------
 *.pth
 *.pt
 *.ckpt
+*.pkl
+*.onnx
+*.safetensors
+*.bin
 
-# Logs / outputs
-runs/
-logs/
-*.log
-result_*.png
-results/
-getDATA/
-
-# Python cache
+# ---------- Python 缓存 / 构建 ----------
 __pycache__/
-*.pyc
-*.pyo
-EOF
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.ipynb_checkpoints/
+.pytest_cache/
+
+# ---------- 编辑器 / 工具 / 环境 ----------
+.vscode/
+.idea/
+.TinyTeX/
+texlive.profile
+.claude/
+.agents/
+.codex/
+.DS_Store
+
+# ---------- LaTeX 编译产物 ----------
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+
+# ---------- 大二进制 / 图片 / PDF ----------
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.gif
+*.tif
+*.tiff
