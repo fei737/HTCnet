@@ -1,0 +1,554 @@
+%% 
+%% Copyright 2019-2024 Elsevier Ltd
+%% 
+%% This file is part of the 'CAS Bundle'.
+%% --------------------------------------
+%% 
+%% It may be distributed under the conditions of the LaTeX Project Public
+%% License, either version 1.3c of this license or (at your option) any
+%% later version.  The latest version of this license is in
+%%    http://www.latex-project.org/lppl.txt
+%% and version 1.3c or later is part of all distributions of LaTeX
+%% version 1999/12/01 or later.
+%% 
+%% The list of all files belonging to the 'CAS Bundle' is
+%% given in the file `manifest.txt'.
+%% 
+%% Template article for cas-dc documentclass for 
+%% double column output.
+
+\documentclass[a4paper,fleqn]{cas-dc}
+
+% If the frontmatter runs over more than one page
+% use the longmktitle option.
+
+%\documentclass[a4paper,fleqn,longmktitle]{cas-dc}
+
+%\usepackage[numbers]{natbib}
+%\usepackage[authoryear]{natbib}
+\usepackage[authoryear,longnamesfirst]{natbib}
+\usepackage{amsmath,amssymb}
+
+%%%Author macros
+\def\tsc#1{\csdef{#1}{\textsc{\lowercase{#1}}\xspace}}
+\tsc{WGM}
+\tsc{QE}
+%%%
+
+% Uncomment and use as if needed
+%\newtheorem{theorem}{Theorem}
+%\newtheorem{lemma}[theorem]{Lemma}
+%\newdefinition{rmk}{Remark}
+%\newproof{pf}{Proof}
+%\newproof{pot}{Proof of Theorem \ref{thm}}
+
+\begin{document}
+\let\WriteBookmarks\relax
+\def\floatpagepagefraction{1}
+\def\textpagefraction{.001}
+
+% Short title
+\shorttitle{Reliability-Calibrated Physics-Factorized HHA Routing}    
+
+% Short author
+\shortauthors{Author et~al.}  
+
+% Main title of the paper
+\title [mode = title]{RSGNet: Reliability-Calibrated, Physics-Factorized HHA Routing for RGB-D Semantic Segmentation}  
+
+% Title footnote mark
+% eg: \tnotemark[1]
+\tnotemark[1] 
+
+% Title footnote 1.
+% eg: \tnotetext[1]{Title footnote text}
+\tnotetext[1]{This manuscript is prepared using the official Elsevier CAS double-column template.} 
+
+% First author
+%
+% Options: Use if required
+% eg: \author[1,3]{Author Name}[type=editor,
+%       style=chinese,
+%       auid=000,
+%       bioid=1,
+%       prefix=Sir,
+%       orcid=0000-0000-0000-0000,
+%       facebook=<facebook id>,
+%       twitter=<twitter id>,
+%       linkedin=<linkedin id>,
+%       gplus=<gplus id>]
+
+\author[1]{Author Name}%[<options>]
+
+% Corresponding author indication
+\cormark[1]
+
+% Email id of the first author
+\ead{author@email.com}
+
+% URL of the first author
+%\ead[url]{}
+
+% Credit authorship
+% eg: \credit{Conceptualization of this study, Methodology, Software}
+\credit{Conceptualization, Methodology, Software, Validation, Writing - original draft}
+
+% Address/affiliation
+\affiliation[1]{organization={Affiliation Name},
+            addressline={Address}, 
+            city={City},
+%          citysep={}, % Uncomment if no comma needed between city and postcode
+            postcode={Postcode}, 
+            state={State},
+            country={Country}}
+
+\author[2]{Coauthor Name}%[]
+
+% Email id of the second author
+\ead{coauthor@email.com}
+
+% URL of the second author
+%\ead[url]{}
+
+% Credit authorship
+\credit{Investigation, Formal analysis, Writing - review and editing}
+
+% Address/affiliation
+\affiliation[2]{organization={Affiliation Name},
+            addressline={Address}, 
+            city={City},
+%          citysep={}, % Uncomment if no comma needed between city and postcode
+            postcode={Postcode}, 
+            state={State},
+            country={Country}}
+
+% Corresponding author text
+\cortext[1]{Corresponding author}
+
+% Footnote text
+%\fntext[1]{}
+
+% For a title note without a number/mark
+%\nonumnote{}
+
+% Here goes the abstract
+\begin{abstract}
+RGB-D semantic segmentation requires geometric cues that are both physically informative and selectively trusted. However, processing HHA as an RGB-like tensor entangles disparity, height, and angle before their distinct roles and failure modes can be modeled. We propose RSGNet, an asymmetric framework in which a pretrained RGB encoder remains the only semantic backbone and HHA supplies routed structural prompts. Its core, Physics-Factorized HHA Routing (PFHR), begins with reliability-aware channel-relation calibration: spatial simplex weights rescale the three HHA channels, while disparity-height, disparity-angle, and height-angle products generate identity-initialized residual corrections. Independent stems then construct a low-frequency disparity-height layout prompt and a high-frequency D/H/A boundary prompt, with angle represented by a sine--cosine basis. Two degradation-supervised reliability maps characterize layout and boundary trustworthiness. At each RGB stage, a content-dependent router combines the prompts from RGB--geometry agreement, boundary evidence, reliability, and a depth-dependent prior. The routed geometry is injected through local pixel fusion at shallow stages, a compact prompt adapter at the intermediate stage, and linear-complexity semantic mixing at the deepest stage. Identity-preserving cross-scale alignment and a fixed capacity-controlled decoder keep the comparison focused on encoder-side geometry guidance. Raw-depth, unified-HHA, independent-channel, relation-free, correct-route, swapped-route, and reliability controls separate the effects of representation, relation modeling, routing, and reliability under a common backbone and decoder.
+\end{abstract}
+
+% TODO: Add one sentence with final multi-seed mIoU and robustness results after all experiments are complete.
+
+% Use if graphical abstract is present
+%\begin{graphicalabstract}
+%\includegraphics{}
+%\end{graphicalabstract}
+
+% Research highlights
+\begin{highlights}
+\item Identity-initialized relation calibration adaptively weights D/H/A cues.
+\item D-H layout and D/H/A boundary relations form distinct structural prompts.
+\item Dual reliability maps guide spatial prompt routing and residual injection.
+\item Stage-specific fusion combines local interaction with deep semantic mixing.
+\item Relation-free and swapped-route controls directly test the design.
+\end{highlights}
+
+
+%\nocite{*}
+
+% Keywords
+% Each keyword is seperated by \sep
+\begin{keywords}
+RGB-D semantic segmentation \sep HHA geometry \sep Physical factorization \sep Reliability routing \sep Channel-relation calibration
+\end{keywords}
+
+\maketitle
+
+% Main text
+\section{Introduction}\label{sec:introduction}
+
+Dense semantic segmentation is a fundamental problem in pattern recognition and scene understanding. In indoor environments, RGB images provide rich appearance and texture, while depth observations provide geometric evidence about scene layout, object support, surface discontinuity, and spatial ordering. RGB-D semantic segmentation is therefore important for robotic perception, embodied intelligence, augmented reality, and human-scene interaction.
+
+The central difficulty is that depth is complementary but not consistently trustworthy. Commercial RGB-D sensors often produce holes, quantization artifacts, unstable contours, and erroneous measurements on reflective or transparent surfaces. RGB and depth may also be locally misaligned after calibration, resolution conversion, or synchronization. When such geometry is fused as an equally reliable semantic stream, corrupted depth responses can be propagated into RGB features and cause negative transfer. Robust RGB-D segmentation therefore requires not only stronger cross-modal interaction, but also a mechanism for deciding which geometric evidence should affect the semantic representation.
+
+This problem is especially visible for HHA geometry. HHA encodes horizontal disparity, height above ground, and angle with gravity \citep{gupta2014hha}. The channels are related but not interchangeable: disparity describes range and scale, height describes support and vertical ordering, and angle describes surface orientation. Boundary evidence can arise in all three channels, although angular responses are especially sensitive to normal estimation and gravity errors. Most fusion pipelines process HHA as an ordinary image or a full second stream. Early unconstrained mixing obscures both the physical role and the failure mode of each channel.
+
+Existing RGB-D segmentation methods have recently moved from generic feature exchange toward modality-specific representation learning and geometry-aware attention. CMX and CMNeXt study cross-modal rectification and flexible asymmetric fusion across RGB-X modalities \citep{zhang2023cmx,zhang2023delivering}; DFormer learns RGB-D representations through dedicated multimodal pretraining \citep{yin2024dformer}; and GeminiFusion targets efficient pixel-wise multimodal interaction with linear token complexity \citep{ding2024geminifusion}. DFormerv2 further shows that depth can act as a geometry prior for attention rather than as a second semantic encoder \citep{yin2025dformerv2}. These advances increase interaction quality, but three failure modes remain under-addressed in a compact HHA setting. First, HHA channels with different physical semantics are entangled too early. Second, unreliable depth regions caused by holes, misalignment, or reflective surfaces are not explicitly down-weighted. Third, layout and boundary structures are handled at the same scale, even though segmentation needs low-frequency room-level context and high-frequency local discontinuities.
+
+Motivated by these observations, RSGNet introduces Physics-Factorized HHA Routing (PFHR). Before feature extraction, PFHR uses a reliability-aware channel-relation gate to calibrate the three HHA variables without destroying their identity: local channel weights model their spatially varying utility, and D-H, D-A, and H-A products supply compact pairwise residuals. The calibrated channels retain separate stems and form two explicit structures. Low-frequency disparity and height interact multiplicatively to describe layout, whereas high-frequency disparity, height, and angular responses compete through a local boundary mixture. The resulting layout and boundary prompts remain distinct until a spatial stage router conditions their injection into RGB. This design is complementary to heterogeneous dual-branch models such as HDBFormer \citep{wei2025hdbformer}: RSGNet keeps one pretrained RGB semantic backbone and spends capacity on selective geometry relations rather than a second full encoder.
+
+The term reliability is used deliberately. RSGNet does not claim Bayesian uncertainty or calibrated sensor noise. Two learned proxies estimate layout and boundary reliability from canonical HHA values, channel-wise local variation, and invalid-region hints. Controlled degradation provides dense supervision, with a disparity-height change target for layout and an angular/high-frequency change target for boundaries. Reliability is used as a conditioning signal for channel calibration, prompt construction, and routing, and as a single multiplicative attenuation of each routed stage residual. This definition is operational and testable: its value must be established by clean and corrupted-geometry comparisons rather than assumed from the architecture.
+
+This distinction is important in light of concurrent geometry-prompting work. GeomPrompt synthesizes a task-driven geometric channel from RGB and learns a recovery adapter for missing or degraded depth \citep{jaganathan2026geomprompt}. RSGNet instead assumes an observed HHA signal, estimates its spatial reliability, and injects only the reliable structural residual into a pretrained RGB semantic hierarchy. The two directions are complementary: one reconstructs a useful geometric input, whereas the other controls the influence of measured geometry.
+
+RSGNet is deliberately asymmetric. RGB is the single primary semantic encoder, HHA is not assigned a symmetric backbone, and the geometry pathway produces prompts rather than semantic logits. The decoder is fixed to the same capacity-controlled multi-scale design for every model variant. The controlled evaluation includes raw metric depth, unified HHA mixing, independent channel stems, physics-factorized prompts without channel-relation calibration, correct and deliberately swapped stage routes, adaptive routing, and dual reliability. It therefore separates the effects of the HHA representation, channel-specific encoding, pairwise calibration, physical prompt construction, stage routing, and reliability rather than attributing all changes to one larger module.
+
+The main contributions are summarized as follows:
+\begin{enumerate}
+\item Reliability-aware HHA relation calibration. A spatial simplex adaptively reweights disparity, height, and angle, while D-H, D-A, and H-A products generate scaled residual corrections. Zero-initialized predictors make this module an exact identity at initialization, so it learns departures from the canonical HHA representation rather than replacing it abruptly.
+\item Physics-factorized structural prompting. Three channel-specific embeddings form a multiplicative low-frequency D-H layout relation and an adaptive high-frequency D/H/A boundary relation instead of an early three-channel mixture.
+\item Dual-reliability stage routing. Separate layout and boundary reliability proxies, RGB--prompt agreement, and depth-dependent priors route the two prompts into local shallow fusion, economical intermediate adaptation, and linear deep semantic mixing.
+\item A falsifiable controlled evaluation. Raw depth, unified HHA, independent stems, relation-free factorization, correct and swapped stage routes, adaptive routing, and reliability controls share one RGB backbone and fixed decoder with closely matched capacity.
+\end{enumerate}
+
+The rest of this paper is organized as follows. Section~\ref{sec:related} reviews RGB-D segmentation, HHA geometry, and reliability-aware fusion. Section~\ref{sec:method} presents RSGNet. Section~\ref{sec:experiments} describes the experimental protocol and quantitative comparisons. Section~\ref{sec:discussion} discusses mechanisms and limitations. Section~\ref{sec:conclusion} concludes the paper.
+
+\section{Related Work}\label{sec:related}
+
+\subsection{RGB-D Fusion: From Interaction Strength to Reliability}
+
+RGB-D semantic segmentation assigns dense semantic labels from color and depth observations. Early systems such as FuseNet established the value of encoder-side depth fusion \citep{hazirbas2016fusenet}. Recent methods illustrate three complementary directions. CMX learns modality-agnostic cross-modal rectification and feature exchange for RGB-X inputs \citep{zhang2023cmx}, while CMNeXt introduces a lightweight hub-to-fuse design that scales to arbitrary auxiliary modalities and sensor failures \citep{zhang2023delivering}. DFormer moves further toward RGB-D-specific representation learning by pretraining on paired RGB-depth data \citep{yin2024dformer}. These methods improve interaction or representation quality, yet they do not make the reliability of each measured HHA pixel an explicit input to a compact stage-wise fusion policy.
+
+The reliability problem is different from the interaction problem. A model may have strong cross-modal attention and still attend to corrupted depth around holes, reflective regions, or misaligned boundaries. UniMRSeg addresses incomplete modalities through hierarchical self-supervised compensation \citep{zhao2025unimrseg}, whereas GeomPrompt reconstructs a task-driven geometric input for a frozen RGB-D segmenter \citep{jaganathan2026geomprompt}. RSGNet takes the complementary route of preserving the measured HHA signal, estimating its reliability, and applying the reliability only to the geometry residual. The decoder remains fixed across all controls so that improvements can be attributed to the encoder-side policy.
+
+\subsection{HHA Geometry and Channel Heterogeneity}
+
+Depth can be represented as raw distance, three-dimensional coordinates, surface normals, or HHA. HHA encodes horizontal disparity, height above ground, and angle with gravity \citep{gupta2014hha}. These channels are physically meaningful, but they are not interchangeable. Horizontal disparity and height above ground are closely related to scene layout, object support, and coarse spatial ordering. The angle channel is related to surface orientation and is often more sensitive to normal estimation, boundary discontinuities, and missing depth.
+
+Many RGB-D pipelines feed HHA into a convolutional or transformer encoder as if it were a normal RGB-like image. DFormerv2 provides a recent alternative in which depth-derived geometry priors bias self-attention without a full depth semantic encoder \citep{yin2025dformerv2}. RSGNet follows the prior-guidance principle but moves beyond a binary channel split. Disparity, height, and angle receive independent stems; disparity-height interaction defines layout, and high-frequency evidence from all channels defines boundaries. A swapped-route control tests whether the proposed physical assignment matters beyond additional capacity.
+
+\subsection{Reliability-Aware Geometry Prompting}
+
+Uncertainty-aware or reliability-aware fusion methods try to prevent unreliable modalities from dominating dense prediction. For RGB-D segmentation, reliability is spatially varying: planar support regions may contain stable geometry, while object contours, transparent objects, and sensor holes may be unreliable. Global modality weights are therefore too coarse for dense segmentation. Pixel-wise or region-wise reliability is a more appropriate mechanism.
+
+RSGNet follows this principle but uses the term reliability rather than strong uncertainty modeling. Its two reliability maps are learned proxies, not calibrated physical uncertainty estimates. Layout reliability follows changes in disparity-height structure, while boundary reliability follows angular and high-frequency changes. They regulate structural residuals without directly predicting semantic classes. This is distinct from flexible multimodal pretraining frameworks such as OmniSegmentor, which aim to learn a universal encoder across arbitrary modality combinations \citep{yin2025omnisegmentor}.
+
+\subsection{Frequency-Aware Structure Modeling}
+
+Semantic segmentation depends on both low-frequency and high-frequency structure. Low-frequency geometry describes room layout, planar support, and contextual scale. High-frequency geometry describes object boundaries, local discontinuities, and thin structures. Recent efficient fusion work such as GeminiFusion combines intra- and inter-modal interactions with linear token complexity \citep{ding2024geminifusion}; HDBFormer likewise separates heterogeneous RGB and depth processing while combining local and global interaction \citep{wei2025hdbformer}. RSGNet first calibrates the local utility and pairwise relations of the physical HHA variables, then ties frequency to their structural roles: a D-H low-frequency relation forms layout, while a learned mixture of D/H/A high-frequency components forms boundaries. The two prompts are routed by encoder depth rather than collapsed before fusion.
+
+\section{Method}\label{sec:method}
+
+\subsection{Overview and Definitions}
+
+Given an RGB image $\mathbf{I}_{r}\in\mathbb{R}^{3\times H\times W}$ and an HHA image $\mathbf{I}_{g}\in\mathbb{R}^{3\times H\times W}$, the goal is to predict a semantic map $\hat{\mathbf{Y}}\in\mathbb{R}^{C\times H\times W}$. RSGNet decomposes HHA as
+\begin{equation}
+  \mathbf{I}_{g}=[\mathbf{I}_{d},\mathbf{I}_{h},\mathbf{I}_{a}],
+\end{equation}
+where $d$, $h$, and $a$ denote horizontal disparity, height above the estimated floor, and angle with gravity. The order is explicit and is canonicalized before augmentation or normalization.
+
+The network is asymmetric. RGB is processed by a pretrained backbone to obtain semantic features $\{\mathbf{F}_{r}^{s}\}_{s=1}^{S}$. The compact PFHR pathway estimates two reliability maps $\mathbf{q}=[\mathbf{q}_{L},\mathbf{q}_{B}]$, calibrates HHA channel and pairwise relations, and produces layout prompts $\{\mathbf{P}_{L}^{s}\}$ and boundary prompts $\{\mathbf{P}_{B}^{s}\}$. The two prompts are preserved until the stage router. They condition RGB features but do not form semantic logits or a second semantic backbone.
+
+\subsection{Canonical HHA Construction}
+
+SUN RGB-D raw depth is decoded with the dataset toolbox bit rotation before conversion to metric depth \citep{song2015sun}. Camera points are converted from image-camera coordinates $[x,y,z]$ to the toolbox convention $[x,z,-y]$ before the provided tilt rotation is applied. Disparity is encoded by clipped inverse metric depth, height is measured relative to a robust floor estimate in the upright frame, and normals undergo the same coordinate conversion and rotation before computing angle with gravity. Invalid pixels are encoded as zero. HHA is written with an explicit RGB-to-BGR conversion and a manifest records the decoded channel order. The loader then canonicalizes any declared disk order to $d$-$h$-$a$. This prevents a color-library convention from silently exchanging disparity and angle. The raw-depth control uses the same decoded metric depth, spatial transforms, RGB backbone, decoder, and fusion budget.
+
+\subsection{Reliability-Aware HHA Relation Calibration}
+
+Canonical ordering prevents channel exchange, but it does not account for the fact that the usefulness of each HHA variable changes across the image. Let $\mathbf{X}=[\mathbf{I}_{d},\mathbf{I}_{h},\mathbf{I}_{a}]$ and let $\operatorname{HP}_{5}(\mathbf{X})=\mathbf{X}-\operatorname{LP}_{5}(\mathbf{X})$. A compact channel gate predicts a per-pixel simplex from the normalized HHA values, absolute high-frequency responses, and dual reliability:
+\begin{equation}
+  \mathbf{w}(u)=\operatorname{softmax} f_{c}
+  \left([\mathbf{X}(u),|\operatorname{HP}_{5}(\mathbf{X})(u)|,
+  q_L(u),q_B(u)]\right),
+\end{equation}
+where $\mathbf{w}=[w_d,w_h,w_a]$ and $\sum_c w_c(u)=1$. The gain for channel $c$ is
+\begin{equation}
+  g_c(u)=1+\eta_{\mathrm{ch}}\bigl(3w_c(u)-1\bigr),
+\end{equation}
+with one shared learnable bounded scale $\eta_{\mathrm{ch}}$. In parallel, a relation mixer receives the three pairwise products and the same reliability maps:
+\begin{equation}
+  \mathbf{R}=f_{r}([\mathbf{I}_{d}\odot\mathbf{I}_{h},
+  \mathbf{I}_{d}\odot\mathbf{I}_{a},
+  \mathbf{I}_{h}\odot\mathbf{I}_{a},q_L,q_B]).
+\end{equation}
+The calibrated HHA tensor is
+\begin{equation}
+  \widetilde{\mathbf{X}}=
+  \mathbf{X}\odot\mathbf{g}+\eta_r\mathbf{R}.
+\end{equation}
+The output layers of $f_c$ and $f_r$ are initialized to zero. Consequently, $\mathbf{w}=(1/3,1/3,1/3)$ and $\mathbf{R}=0$ at initialization, making $\widetilde{\mathbf{X}}=\mathbf{X}$. This identity start protects the physical HHA code while allowing training to learn where a channel or a pairwise relation should be emphasized. The relation-free PFHR variant bypasses this calibration and provides its direct ablation.
+
+\subsection{Channel-Specific Embeddings}
+
+The three physical variables are not passed through one input convolution. Separate stems produce
+\begin{equation}
+  \mathbf{E}_{d}=f_d(\widetilde{\mathbf{I}}_{d}),\qquad
+  \mathbf{E}_{h}=f_h(\widetilde{\mathbf{I}}_{h}),\qquad
+  \mathbf{E}_{a}=f_a([\sin\boldsymbol{\theta},\cos\boldsymbol{\theta}]),
+\end{equation}
+where $\boldsymbol{\theta}=\pi(\operatorname{clip}(\widetilde{\mathbf{I}}_{a},-1,1)+1)/4$ maps the calibrated normalized angle code to its $0$--$90^{\circ}$ range. The sine--cosine basis exposes complementary orientation components without treating angle as an ordinary image intensity.
+
+\subsection{Physics-Factorized HHA Relations}
+
+\subsubsection{Disparity-Height Layout Relation}
+
+Let $\operatorname{LP}_{9}$ be a $9\times9$ fixed average low-pass operator. PFHR forms a layout relation
+\begin{equation}
+  \mathbf{L}=f_L\!\left(
+  \operatorname{LP}_{9}(\mathbf{E}_{d})+
+  \operatorname{LP}_{9}(\mathbf{E}_{h})+
+  f_{dh}\!\left(
+  \operatorname{LP}_{9}(\mathbf{E}_{d})\odot
+  \operatorname{LP}_{9}(\mathbf{E}_{h})\right)\right).
+\end{equation}
+The additive terms retain range and height evidence, while the multiplicative term makes their support and scale relation explicit. Separate projections map $\mathbf{L}$ to the channel dimension of every RGB stage.
+
+\subsubsection{Multi-Channel Boundary Relation}
+
+Boundary evidence is not assigned exclusively to angle. High-pass components are computed as $\mathbf{B}_{d}=g_d(\operatorname{HP}_{9}(\mathbf{E}_{d}))$, $\mathbf{B}_{h}=g_h(\operatorname{HP}_{9}(\mathbf{E}_{h}))$, and $\mathbf{B}_{a}=g_a(\operatorname{HP}_{5}(\mathbf{E}_{a}))$. Their channel-averaged absolute responses and the two reliability maps predict a spatial simplex weight $\boldsymbol{\beta}(u)$:
+\begin{equation}
+  \boldsymbol{\beta}(u)=\operatorname{softmax}
+  r_B([e_d(u),e_h(u),e_a(u),q_L(u),q_B(u)]),
+\end{equation}
+\begin{equation}
+  \mathbf{B}(u)=\sum_{c\in\{d,h,a\}}\beta_c(u)\mathbf{B}_c(u).
+\end{equation}
+Thus, disparity discontinuity, height discontinuity, and angular change can all support a boundary. Unlike the input relation gate, which calibrates raw HHA roles before the stems, this router selects among learned high-frequency feature responses. The explicit three-component mixture also supports direct component ablation.
+
+% Figure
+\begin{figure}%[]
+  \centering
+  \fbox{\begin{minipage}[c][0.23\textheight][c]{0.90\linewidth}
+  \centering
+  \textbf{RGB semantic path}\par
+  RGB $\rightarrow$ MiT-B2 stages $\rightarrow \{\mathbf{F}_{r}^{1},\ldots,\mathbf{F}_{r}^{4}\}$\par\medskip
+  \textbf{Interpretable HHA prompting path}\par
+  D-H-A $\rightarrow$ channel weights $[w_d,w_h,w_a]$ and pair relations\par
+  $\rightarrow$ separate D/H/A stems $\rightarrow$ D-H layout $\mathbf{L}$ + D/H/A boundary $\mathbf{B}$\par
+  $\rightarrow$ dual reliability $[q_L,q_B]$ + stage routes $[\alpha_L^s,\alpha_B^s]$\par\medskip
+  \textbf{Residual guidance and prediction}\par
+  local fusion (stages 1--2) $\rightarrow$ prompt adapter (stage 3)\par
+  $\rightarrow$ semantic mixing (stage 4) $\rightarrow$ fixed decoder $\rightarrow \hat{\mathbf{Y}}$.
+  \end{minipage}}
+    \caption{Overview of RSGNet with PFHR. Layout and boundary prompts remain separate until reliability-aware stage routing and never form a second semantic stream.}\label{fig:overview}
+\end{figure}
+
+\subsection{Dual Geometry Reliability}
+
+A shallow head receives normalized HHA, three channel-wise local standard-deviation maps, and a binary invalid-pixel hint. It predicts $\mathbf{q}_{L},\mathbf{q}_{B}\in[0,1]^{H\times W}$ and explicitly sets invalid pixels to zero. During training, one of block dropout, encoded-value noise, or spatial shift is sampled under the configured degradation probability. Layout reliability is an exponential transform of mean D-H change. Boundary reliability applies the same transform to an equal mixture of angle change and the change between clean and degraded $5\times5$ high-pass responses. Changed pixels receive full calibration weight, whereas unchanged valid pixels receive a small clean-region weight. The calibration term is
+\begin{equation}
+  \mathcal{L}_{\mathrm{rel}}
+  =
+  \frac{\sum_{k\in\{L,B\}}\sum_{u}w_u\,
+  \mathrm{BCE}(q_{k,u},q_{k,u}^{*})}
+       {2\sum_{u}w_u}.
+\end{equation}
+The two maps condition input relation calibration, boundary construction, and stage routing. After routing, their weighted combination is used once as the multiplicative attenuation of the geometry residual at each RGB stage; other uses of reliability are conditioning inputs rather than repeated pre-multiplication of HHA features.
+
+\subsection{Spatial Stage Routing}
+
+At stage $s$, cosine agreement between RGB and each prompt, the two reliability maps, and the boundary guide form the router input. A depth-dependent prior initializes shallow stages toward boundary evidence and deep stages toward layout evidence:
+\begin{equation}
+  \rho_{s,L}=0.25+0.50\frac{s-1}{S-1},\qquad
+  \rho_{s,B}=1-\rho_{s,L}.
+\end{equation}
+The adaptive route is
+\begin{equation}
+  \boldsymbol{\pi}^{s}(u)=\operatorname{softmax}
+  \left(\log\boldsymbol{\rho}^{s}+r_s(u)\right).
+\end{equation}
+It produces one routed prompt and one routed reliability value at each stage:
+\begin{align}
+  \mathbf{P}^{s}(u)&=\pi_{L}^{s}(u)\mathbf{P}_{L}^{s}(u)+
+  \pi_{B}^{s}(u)\mathbf{P}_{B}^{s}(u),\\
+  \bar q^{s}(u)&=\pi_{L}^{s}(u)q_L(u)+\pi_{B}^{s}(u)q_B(u).
+\end{align}
+The static control sets $r_s=0$, and the swapped control exchanges $\rho_{s,L}$ and $\rho_{s,B}$. These controls have the same prompt encoders and nearly identical parameter counts.
+
+\subsection{Stage-Wise Geometry Guidance}
+
+The routed stage operator is
+\begin{equation}
+  \widetilde{\mathbf{F}}_{r}^{s}=\mathbf{F}_{r}^{s}+
+  \alpha_s\bar q^{s}\odot
+  \Phi_s(\mathbf{F}_{r}^{s},\mathbf{P}^{s},\mathbf{B}^{s},\bar q^{s}),
+\end{equation}
+where $\alpha_s$ is initialized to a small value and $\bar q^s$ is the single multiplicative reliability gate on the stage residual. At high-resolution encoder stages 1 and 2, \emph{Reliability-Conditioned Pixel Fusion} applies separate depthwise local filters to RGB and geometry. Their element-wise interaction, cosine agreement, boundary guide, and routed reliability are used to predict a pixel gate and a local residual.
+
+At encoder stage 3, a \emph{Geometry Prompt Adapter} projects the routed prompt with depthwise and pointwise convolutions. A scalar spatial gate inferred from the projected prompt, boundary guide, and routed reliability controls the residual, providing economical geometric conditioning without global attention.
+
+At encoder stage 4, \emph{Reliability-Conditioned Linear Semantic Mixing} retains RGB-derived queries, keys, and values and uses the positive kernel $\phi(x)=\operatorname{ELU}(x)+1$ for linear attention factorization. The routed prompt, boundary guide, and routed reliability generate a geometry-dependent key scale, while routed reliability also attenuates the resulting semantic residual. Geometry therefore changes which RGB semantic tokens exchange context without forming a quadratic affinity matrix or a second semantic value stream. A fixed token cap is retained as a memory guard, and the output is restored to the original feature size.
+
+\subsection{Identity-Preserving Cross-Scale Alignment}
+
+Deep features are resized and projected to the channel dimension of the preceding stage. Instead of multiplying the shallow feature by two gates and adding the full deep response, the refined aligner preserves the shallow identity:
+\begin{equation}
+  \mathbf{F}^{s}_{\mathrm{out}} = \mathbf{F}^{s}_{\mathrm{shallow}} +
+  \gamma_s\,G_{\mathrm{sp}}G_{\mathrm{ch}}\,\mathbf{F}^{s}_{\mathrm{deep}},
+\end{equation}
+where $G_{\mathrm{sp}}$ and $G_{\mathrm{ch}}$ are spatial and channel gates and $\gamma_s$ is a small learnable scale. This design preserves high-resolution boundary information and lets the decoder retain complementary stage features. The legacy aligner is retained only for A-line reproducibility and is not used by the paper-facing PFHR model.
+
+\subsection{Capacity-Controlled Decoder}
+
+To avoid attributing improvements to decoder changes, RSGNet uses one fixed multi-scale decoder for every ablation. Each fused feature is projected to a shared width by a $1\times1$ Conv-BN-activation block, resized to the highest feature resolution, concatenated, and classified. The decoder contains one main classifier, one auxiliary classifier, and one edge head. Final logits are bilinearly upsampled to the input resolution. This follows the simple decoder principle used in transformer segmentation \citep{xie2021segformer} and keeps the paper focused on encoder-side geometry guidance. Efficiency is treated as an empirical result measured by parameters, FLOPs, peak memory, and throughput rather than as a naming claim.
+
+\subsection{Training Objective}
+
+The main objective is kept compact:
+\begin{equation}
+  \mathcal{L}_{\mathrm{main}}
+  =
+  \mathcal{L}_{\mathrm{ce}}
+  +\lambda_{\mathrm{lov}}\mathcal{L}_{\mathrm{lovasz}}
+  +\lambda_{\mathrm{edge}}\mathcal{L}_{\mathrm{edge}}
+  +\lambda_{\mathrm{aux}}\mathcal{L}_{\mathrm{aux}}
+  +\lambda_{\mathrm{rel}}\mathcal{L}_{\mathrm{rel}}.
+\end{equation}
+Here $\mathcal{L}_{\mathrm{ce}}$ is dense cross-entropy, $\mathcal{L}_{\mathrm{lovasz}}$ improves region overlap \citep{berman2018lovasz}, $\mathcal{L}_{\mathrm{edge}}$ supervises the lightweight edge head using mask-derived boundaries, and $\mathcal{L}_{\mathrm{aux}}$ supervises the auxiliary decoder output. $\mathcal{L}_{\mathrm{rel}}$ is active only for the final reliability-aware model. OHEM, Dice, boundary-weighted CE, and feature-precision losses remain disabled in the primary architecture comparison so that structural changes are not confounded with a changing loss recipe.
+
+\section{Experiments}\label{sec:experiments}
+
+\subsection{Datasets and Metrics}
+
+Experiments use SUN RGB-D and NYUDv2. SUN RGB-D contains 10,335 RGB-D images; the paper-facing protocol uses the official 5,285/5,050 split and evaluates 37 mapped classes, with void and excluded labels set to 255 \citep{song2015sun}. NYUDv2 contains 1,449 RGB-D images with dense semantic annotations \citep{silberman2012nyud}. Unless otherwise specified, mean Intersection over Union (mIoU) is the primary metric. Pixel accuracy, mean class accuracy, parameter count, FLOPs, and inference speed are supplementary metrics.
+
+\subsection{Implementation Details}
+
+The RGB backbone is a MiT-B2 encoder initialized from the same ImageNet weights for every run. SUN RGB-D training uses $480\times480$ crops; evaluation uses native-resolution sliding windows. Raw SUN depth is decoded with the official toolbox bit rotation and stored in millimeters. Canonical HHA is generated in $d$-$h$-$a$ order and recorded by a preprocessing manifest; raw-depth and HHA runs use identical spatial transforms. The fixed decoder width is 256, the geometry prompt width is 32, and the deepest-stage linear mixer is limited to 512 tokens. AdamW uses a base learning rate of $8\times10^{-5}$, an encoder multiplier of 0.3, five warm-up epochs, polynomial decay with a minimum ratio of 0.05, stochastic depth of 0.10, mixed precision, exponential moving average, and a target global batch size of 16. Local, semantic, and cross-scale residual scales are initialized to 0.10. The final model applies geometry degradation with probability 0.35, reliability loss weight 0.05, and reliability warm-up of 10 epochs. All paper-facing variants use a fixed 100-epoch schedule and are reported over at least three seeds; the official test split is used only after training. Single-scale and multi-scale results use the same final checkpoint.
+
+\subsection{Main Comparison}
+
+The main comparison includes classical RGB-D segmentation methods, recent transformer-based RGB-D fusion methods, and strong RGB-only baselines. Results reproduced under the controlled protocol and results quoted from papers are separated. We include CMX, CMNeXt, DFormer, GeminiFusion, DFormerv2, HDBFormer, and OmniSegmentor as recent reference families \citep{zhang2023cmx,zhang2023delivering,yin2024dformer,ding2024geminifusion,yin2025dformerv2,wei2025hdbformer,yin2025omnisegmentor}. Because backbone, pretraining, input resolution, class mapping, and test-time augmentation may differ across methods, the table explicitly indicates these settings and does not mix single-scale and multi-scale numbers.
+
+\begin{table*}%[]
+\caption{Main comparison on SUN RGB-D and NYUDv2. ``TBD'' denotes result placeholders in the current draft. SS and MS denote single-scale and multi-scale testing, respectively.}\label{tab:main}
+\begin{tabular*}{\tblwidth}{@{\extracolsep{\fill}}llllcc@{}}
+\toprule
+Method & Backbone & Modality & Test & SUN & NYUDv2 \\
+\midrule
+RGB baseline & MiT-B2 & RGB & SS & TBD & TBD \\
+CMX & MiT-B2/B4/B5 & RGB-D & SS/MS & Reported & Reported \\
+CMNeXt & MiT-B2/B4 & RGB-D & SS & Reported & Reported \\
+DFormer & DFormer-S/B/L & RGB-D & SS/MS & Reported & Reported \\
+GeminiFusion & Reported & RGB-D & SS/MS & Reported & Reported \\
+DFormerv2 & DFormer-v2 & RGB-D & SS/MS & Reported & Reported \\
+HDBFormer & Reported & RGB-D & SS/MS & Reported & Reported \\
+OmniSegmentor & ImageNeXt & RGB-D & SS/MS & Reported & Reported \\
+RSGNet (PFHR) & MiT-B2 & RGB-HHA & SS & TBD & TBD \\
+RSGNet (PFHR) & MiT-B2 & RGB-HHA & MS & TBD & TBD \\
+\bottomrule
+\end{tabular*}
+\end{table*}
+
+\subsection{Controlled Component Ablation}
+
+The main ablation follows three causal chains. R0, C1, and C2 test raw depth, unified HHA, and channel-specific encoding. C3--C5 then test physical factorization, deliberately swapped stage priors, and adaptive routing. C6 adds dual reliability, and C9 adds the identity-initialized channel-relation calibration used by the current model. C0 is the RGB control. All geometry rows contain 29.43--29.61M parameters, use the same RGB backbone and decoder, and differ only in the declared representation, calibration, route, or reliability component. The C9 calibration adds 2,040 trainable parameters over C6, so both round to 29.61M.
+
+\begin{table*}%[]
+\caption{Controlled representation and routing ablation on SUN RGB-D.}\label{tab:ablation}
+\begin{tabular*}{\tblwidth}{@{\extracolsep{\fill}}lllllcc@{}}
+\toprule
+ID & Input & Geometry encoding & Route & Rel. & Params & mIoU \\
+\midrule
+C0 & RGB & None & None & Off & 27.21M & TBD \\
+R0 & RGB + depth & Unified depth & None & Off & 29.43M & TBD \\
+C1 & RGB + HHA & Unified D-H-A & None & Off & 29.43M & TBD \\
+C2 & RGB + HHA & Independent stems & None & Off & 29.45M & TBD \\
+C3 & RGB + HHA & Physical relations & Static correct & Off & 29.60M & TBD \\
+C4 & RGB + HHA & Physical relations & Static swapped & Off & 29.60M & TBD \\
+C5 & RGB + HHA & Physical relations & Adaptive & Off & 29.60M & TBD \\
+C6 & RGB + HHA & Physical relations & Adaptive & Dual & 29.61M & TBD \\
+C9 & RGB + HHA & Physical + channel/pair calibration & Adaptive & Dual & 29.61M & TBD \\
+\bottomrule
+\end{tabular*}
+\end{table*}
+
+\subsection{Channel and Mechanism Verification}
+
+Capacity-matched channel interventions set excluded normalized channels to their neutral value without deleting stems or projections. Interior mIoU excludes a fixed-width band around ground-truth semantic boundaries, while boundary F1 is computed against mask-derived boundaries. The expected evidence is role-specific: disparity-height should contribute more strongly to interior layout, angle should improve boundary localization in combination with D/H discontinuities, and complete HHA should improve both.
+
+\begin{table*}%[]
+\caption{Capacity-matched HHA channel interventions.}\label{tab:channels}
+\begin{tabular*}{\tblwidth}{@{\extracolsep{\fill}}llllcc@{}}
+\toprule
+ID & Active channels & Intended evidence & Params & Interior mIoU & Boundary F1 \\
+\midrule
+H0 & Disparity & Range and scale & 29.60M & TBD & TBD \\
+H1 & Height & Support and vertical order & 29.60M & TBD & TBD \\
+H2 & Angle & Surface orientation & 29.60M & TBD & TBD \\
+H3 & Disparity + height & Layout relation & 29.60M & TBD & TBD \\
+C3 & Full HHA & Layout + boundary & 29.60M & TBD & TBD \\
+\bottomrule
+\end{tabular*}
+\end{table*}
+
+The routing mechanisms are also evaluated directly rather than only through final mIoU. For the input relation gate, we report mean D/H/A weights by semantic region and compare C9 with the relation-free C6 model. For the stage router, we report mean $\pi_B$ inside and outside a ground-truth boundary band, mean $\pi_L$ at each encoder stage, and the high-frequency energy ratio of each prompt. A valid mechanism should produce non-collapsed channel weights, larger boundary-route weights near boundaries, and a larger layout prior at deep stages. C4 is the causal negative control: if swapped routing matches C3 and C5, the claimed physical stage assignment is unsupported. Likewise, C9 supports the channel-relation claim only if its gain over C6 is repeatable under the same training and checkpoint-selection protocol.
+
+\subsection{Robustness Under Degraded Geometry}
+
+Robustness is evaluated under controlled geometry degradation. Representation-space HHA dropout, noise, and shift are reported only as deterministic diagnostics. For the primary physical test, raw metric depth is corrupted before HHA regeneration, and the provided tilt rotation is perturbed before upright height and angular cues are computed. The main table uses a 30\% rectangular dropout, Gaussian metric-depth noise with standard deviation 0.05~m, an 8-pixel depth shift relative to RGB, and a $5^{\circ}$ tilt error. A three-level severity sweep is reported in the supplementary material. Corruptions are deterministic per sample, and only the official 5,050-image test split is regenerated. The reliability claim requires a smaller degradation-induced drop for C6 than C5; the additional C9 comparison determines whether channel-relation calibration preserves or improves that robustness.
+
+\begin{table}%[]
+\caption{Robustness under physically degraded geometry before HHA generation. Values are mIoU.}\label{tab:robust}
+\begin{tabular*}{\tblwidth}{@{\extracolsep{\fill}}lccccc@{}}
+\toprule
+Method & Clean & Noise & Dropout & Shift & Tilt \\
+\midrule
+C0 RGB & TBD & TBD & TBD & TBD & TBD \\
+C5 PFHR without reliability & TBD & TBD & TBD & TBD & TBD \\
+C6 PFHR with dual reliability & TBD & TBD & TBD & TBD & TBD \\
+C9 RSGNet & TBD & TBD & TBD & TBD & TBD \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+\subsection{Complexity Analysis}
+
+Complexity is reported together with accuracy to show whether the proposed fusion improves robustness without relying on excessive decoder capacity. Parameter counts below are measured from the released MiT-B2 configuration. FLOPs use twice the THOP-counted MACs for a $480\times480$ RGB-HHA pair. FPS is measured separately with batch size one and FP32 on one RTX~4090~D; the final value will use repeated runs and their median.
+
+\begin{table}%[]
+\caption{Complexity comparison.}\label{tab:complexity}
+\begin{tabular*}{\tblwidth}{@{\extracolsep{\fill}}lcccc@{}}
+\toprule
+Method & Params & FLOPs & FPS & mIoU \\
+\midrule
+C0 RGB baseline & 27.21M & 67.76G & TBD & TBD \\
+C1 unified HHA & 29.43M & 75.65G & TBD & TBD \\
+C5 PFHR without reliability & 29.60M & 101.45G & TBD & TBD \\
+C6 PFHR with dual reliability & 29.61M & 104.64G & TBD & TBD \\
+C9 RSGNet (current) & 29.61M & 105.55G & TBD & TBD \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+\subsection{Qualitative Analysis}
+
+Qualitative analysis includes canonical and calibrated HHA channels, input channel weights, layout and boundary prompts, both reliability maps, stage route weights, ground-truth masks, C0/C1/C4/C6/C9 predictions, and failure cases. The analysis emphasizes missing depth, thin structures, cluttered objects, weak RGB contrast, and RGB--geometry edge conflicts. Route maps are accompanied by quantitative boundary/interior and stage-wise statistics rather than interpreted from isolated examples.
+
+\section{Discussion}\label{sec:discussion}
+
+\subsection{Why Physical Relations Matter}
+
+HHA is useful because it packages depth into physically meaningful variables, but independent stems alone do not specify either their local utility or how they should interact. PFHR addresses these questions at two levels. Before the stems, C9 calibrates D/H/A with spatial channel weights and D-H/D-A/H-A residual relations. After the stems, disparity and height jointly describe low-frequency support and scale, whereas high-frequency changes from disparity, height, and angle jointly describe discontinuities. C2 tests whether independent encoding is sufficient, C3 adds the factorized prompts, C4 reverses their stage assignment, and C6 versus C9 isolates input relation calibration under dual reliability. The claims are supported only if the corresponding controls improve consistently across seeds.
+
+\subsection{Why Frequency-Aware Guidance Matters}
+
+Segmentation uses geometry at different spatial frequencies. PFHR constructs low-frequency layout and high-frequency boundary relations before routing but does not force a hard stage assignment. The initialized prior favors boundaries at shallow stages and layout at deep stages, while the spatial correction can override it where RGB agreement and reliability justify doing so. Reporting route statistics is essential: a final accuracy gain without the predicted boundary/interior and shallow/deep behavior would not validate the stated mechanism.
+
+\subsection{When Reliability Can Fail}
+
+The reliability proxies are learned from data, not from calibrated sensor physics. They can fail when RGB and geometry are both unreliable, when RGB edges disagree with semantic boundaries, or when severe misalignment makes agreement misleading. Layout and boundary errors are also correlated because all HHA channels derive from the same depth observation. Transparent objects, very small objects, and poor floor or gravity estimates remain difficult. These limitations motivate raw-depth corruption, tilt perturbation, and reliability visualization as required evidence rather than optional figures.
+
+\subsection{Scope of the Controlled Design}
+
+RSGNet should be interpreted as a controlled encoder-side guidance framework. RGB is the only primary semantic stream, HHA generates structural prompts, and the decoder is fixed. The model intentionally excludes a second HHA backbone, full RGB-D pretraining, depth recovery networks, and query-driven decoders. R0, C0--C6, and C9 isolate input representation, independent encoding, factorized prompt relations, stage assignment, adaptive routing, reliability, and input channel-relation calibration. DFormer and OmniSegmentor show the value of multimodal pretraining, while GeomPrompt studies input recovery; RSGNet isolates the structured use of measured geometry instead.
+
+\subsection{Adaptive Calibration and Reproducibility}
+
+Adaptive routes can improve flexibility but weaken interpretability if they collapse to one expert. PFHR therefore uses a three-way input-channel simplex, a two-way prompt simplex, identity initialization for input calibration, depth-dependent initialization for stage routing, one multiplicative reliability gate per stage residual, and an explicit swapped-route control. Any clean mIoU gain must be reported together with route distributions, dual reliability maps, degraded-depth robustness, parameter count, and at least three seeds. A channel gate that remains uniform or a prompt route that does not vary with boundary location or encoder depth should be treated as an unsupported mechanism even if one seed improves.
+
+\section{Conclusion}\label{sec:conclusion}
+
+This paper presents RSGNet with Physics-Factorized HHA Routing for RGB-D semantic segmentation. RSGNet treats HHA as selectively trusted structural evidence rather than a second semantic image stream. Reliability-aware channel-relation calibration first learns spatial D/H/A weights and scaled D-H/D-A/H-A residuals from an identity initialization. Channel-specific embeddings then form a low-frequency disparity-height layout prompt and a reliability-conditioned high-frequency D/H/A boundary prompt. Dual reliability proxies and a spatial stage router control stage-specific RGB residual guidance, while local pixel interaction, linear deep semantic mixing, identity-preserving cross-scale alignment, and a fixed decoder keep the design compact. Raw-depth, unified-HHA, independent-stem, relation-free, correct-route, swapped-route, channel-intervention, and reliability controls provide a fixed basis for testing each claimed mechanism.
+
+% TODO: Add quantitative conclusions after the multi-seed and robustness protocols are complete.
+
+% To print the credit authorship contribution details
+\printcredits
+
+%% Loading bibliography style file
+%\bibliographystyle{model1-num-names}
+\bibliographystyle{cas-model2-names}
+
+% Loading bibliography database
+\bibliography{cas-refs}
+
+% Biography
+%\bio{}
+% Here goes the biography details.
+%\endbio
+
+%\bio{pic1}
+% Here goes the biography details.
+%\endbio
+
+\end{document}

@@ -1,0 +1,14 @@
+{
+  "source": "official_train_5051_10335",
+  "validation_fraction": 0.1,
+  "validation_seed": 2105,
+  "train_samples": 4757,
+  "validation_samples": 528,
+  "validation_image_coverage": {
+    "shelves": 23,
+    "floor_mat": 2,
+    "shower_curtain": 2,
+    "night_stand": 11
+  },
+  "official_test_used_for_selection": false
+}
